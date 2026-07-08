@@ -33,7 +33,7 @@ class LoginStep1Tests(TestCase):
     def tearDown(self):
         cache.clear()
 
-    @patch("portal.services.email_service.send_login_otp_email")
+    @patch("portal.auth_views.send_login_otp_email")
     def test_valid_credentials_sends_email(self, mock_send):
         resp = self.client.post(LOGIN_URL, {"email": "test@edunova.edu", "password": "TestPass@99"}, content_type="application/json")
         self.assertEqual(resp.status_code, 200)
@@ -41,13 +41,13 @@ class LoginStep1Tests(TestCase):
         self.assertEqual(resp.json()["detail"], "OTP sent successfully.")
         mock_send.assert_called_once()
 
-    @patch("portal.services.email_service.send_login_otp_email")
+    @patch("portal.auth_views.send_login_otp_email")
     def test_otp_not_in_response(self, mock_send):
         resp = self.client.post(LOGIN_URL, {"email": "test@edunova.edu", "password": "TestPass@99"}, content_type="application/json")
         self.assertNotIn("otp", resp.json())
         self.assertNotIn("dev_otp", resp.json())
 
-    @patch("portal.services.email_service.send_login_otp_email")
+    @patch("portal.auth_views.send_login_otp_email")
     def test_login_by_username(self, mock_send):
         resp = self.client.post(LOGIN_URL, {"email": "testuser", "password": "TestPass@99"}, content_type="application/json")
         self.assertEqual(resp.status_code, 200)
@@ -65,7 +65,7 @@ class LoginStep1Tests(TestCase):
         resp = self.client.post(LOGIN_URL, {"email": "inactive@edunova.edu", "password": "TestPass@99"}, content_type="application/json")
         self.assertEqual(resp.status_code, 400)
 
-    @patch("portal.services.email_service.send_login_otp_email", side_effect=RuntimeError("SMTP down"))
+    @patch("portal.auth_views.send_login_otp_email", side_effect=RuntimeError("SMTP down"))
     def test_smtp_failure_returns_500(self, mock_send):
         resp = self.client.post(LOGIN_URL, {"email": "test@edunova.edu", "password": "TestPass@99"}, content_type="application/json")
         self.assertEqual(resp.status_code, 500)
@@ -123,7 +123,7 @@ class ResendOtpTests(TestCase):
     def tearDown(self):
         cache.clear()
 
-    @patch("portal.services.email_service.send_login_otp_email")
+    @patch("portal.auth_views.send_login_otp_email")
     def test_resend_sends_new_email(self, mock_send):
         cache.set(f"portal_login_otp:{self.user.id}", "111111", 300)
         resp = self.client.post(RESEND_URL, {"user_id": self.user.id}, content_type="application/json")
@@ -131,7 +131,7 @@ class ResendOtpTests(TestCase):
         self.assertEqual(resp.json()["detail"], "OTP resent successfully.")
         mock_send.assert_called_once()
 
-    @patch("portal.services.email_service.send_login_otp_email")
+    @patch("portal.auth_views.send_login_otp_email")
     def test_resend_invalidates_previous_otp(self, mock_send):
         old_otp = "111111"
         cache.set(f"portal_login_otp:{self.user.id}", old_otp, 300)
@@ -141,7 +141,7 @@ class ResendOtpTests(TestCase):
         resp = self.client.post(VERIFY_URL, {"user_id": self.user.id, "otp": old_otp}, content_type="application/json")
         self.assertEqual(resp.status_code, 400)
 
-    @patch("portal.services.email_service.send_login_otp_email")
+    @patch("portal.auth_views.send_login_otp_email")
     def test_resend_otp_not_in_response(self, mock_send):
         resp = self.client.post(RESEND_URL, {"user_id": self.user.id}, content_type="application/json")
         self.assertNotIn("otp", resp.json())
@@ -151,7 +151,7 @@ class ResendOtpTests(TestCase):
         resp = self.client.post(RESEND_URL, {"user_id": 99999}, content_type="application/json")
         self.assertEqual(resp.status_code, 404)
 
-    @patch("portal.services.email_service.send_login_otp_email", side_effect=RuntimeError("SMTP down"))
+    @patch("portal.auth_views.send_login_otp_email", side_effect=RuntimeError("SMTP down"))
     def test_resend_smtp_failure_returns_500(self, mock_send):
         resp = self.client.post(RESEND_URL, {"user_id": self.user.id}, content_type="application/json")
         self.assertEqual(resp.status_code, 500)
