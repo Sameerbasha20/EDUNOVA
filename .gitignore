@@ -1,0 +1,40 @@
+# --- Secrets / environment ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Python ---
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+db.sqlite3
+db.sqlite3-journal
+backend/edunova
+backend/media/
+backend/staticfiles/
+backend/backups/
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/build/
+.vite/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- Docker ---
+docker-compose.override.yml

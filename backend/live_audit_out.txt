@@ -1,0 +1,181 @@
+Python 3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)] on win32
+Type "help", "copyright", "credits" or "license" for more information.
+(InteractiveConsole)
+>>> ... ... ... ... ... ... ... "\nIn-process endpoint audit. Uses Django's test Client (no real HTTP/network\nneeded) so it works even where the sandbox can't reach a locally running\nserver, and reads the OTP straight out of the shared cache instead of\ndepending on real email delivery.\n\nRun with: venv/Scripts/python.exe manage.py shell < live_audit.py\n"
+>>> >>> >>> >>> >>> >>> >>> >>> ... ... >>> >>> >>> >>> >>> >>> >>> ... ... ... ... ... ... ... ... ... ... >>> >>> ... ... ... ... ... ... ... ... ... ... >>> >>> ... ... ... ... ... ... ... ... ... ... ... ... >>> >>> ... ... ... ... ... ... ... ... ... ... ... >>> >>> === LOGIN ===
+>>> 
+================================================================================
+LOGIN STEP 1
+================================================================================
+Identifier: 'student@edunova.edu'
+Password length: 11
+User object: student.demo
+Username: student.demo
+Email: student@edunova.edu
+Active: True
+Password check: True
+authenticate() -> student.demo
+Generated OTP: 429325
+Sending OTP email...
+Email sent successfully.
+SUCCESS
+================================================================================
+>>>   Student : OK
+>>> 
+================================================================================
+LOGIN STEP 1
+================================================================================
+Identifier: 'teacher@edunova.edu'
+Password length: 11
+User object: teacher.demo
+Username: teacher.demo
+Email: teacher@edunova.edu
+Active: True
+Password check: True
+authenticate() -> teacher.demo
+Generated OTP: 417129
+Sending OTP email...
+Email sent successfully.
+SUCCESS
+================================================================================
+>>>   Teacher : OK
+>>> 
+================================================================================
+LOGIN STEP 1
+================================================================================
+Identifier: 'parent@edunova.edu'
+Password length: 11
+User object: parent.demo
+Username: parent.demo
+Email: parent@edunova.edu
+Active: True
+Password check: True
+authenticate() -> parent.demo
+Generated OTP: 334142
+Sending OTP email...
+Email sent successfully.
+SUCCESS
+================================================================================
+>>>   Parent  : OK
+>>> 
+================================================================================
+LOGIN STEP 1
+================================================================================
+Identifier: 'admin@edunova.edu'
+Password length: 11
+User object: admin.demo
+Username: admin.demo
+Email: admin@edunova.edu
+Active: True
+Password check: True
+authenticate() -> admin.demo
+Generated OTP: 144059
+Sending OTP email...
+Email sent successfully.
+SUCCESS
+================================================================================
+>>>   Admin   : OK
+>>> >>> ... ... ... ... ... ... ... ... ... ... ... Forbidden: /api/lms/analytics/
+
+=== STUDENT PORTAL ===
+  [OK] /student/dashboard/
+  [OK] /student/profile/
+  [OK] /student/attendance/
+  [OK] /student/timetable/
+  [OK] /student/homework/
+  [OK] /student/assignments/
+  [OK] /student/courses/
+  [OK] /student/exams/
+  [OK] /student/hall-tickets/
+  [OK] /student/results/
+  [OK] /student/fees/
+  [OK] /student/library/
+  [OK] /student/library/search/?q=math
+  [OK] /student/certificates/
+  [OK] /student/announcements/
+  [OK] /student/events/
+  [OK] /student/hostel/
+  [OK] /student/medical-records/
+  [OK] /student/report-card/?exam_name=Unit_Test_1
+  [OK] /lms/forum-topics/?course_id=1
+  [OK] /lms/notes/?course_id=1
+  [FAIL(403)] /lms/analytics/?course_id=1 => {'detail': "You don't have access to this course."}
+>>> >>> ... ... ... ... ... ... ... ... ... 
+=== TEACHER PORTAL ===
+  [OK] /teacher/dashboard/
+  [OK] /teacher/profile/
+  [OK] /teacher/classes/
+  [OK] /teacher/attendance/?class_id=1
+  [OK] /teacher/homework/
+  [OK] /teacher/assignments/
+  [OK] /teacher/exams/
+  [OK] /teacher/marks-entry/?exam_schedule_id=1
+  [OK] /teacher/performance/?class_id=1
+  [OK] /teacher/messages/
+  [OK] /teacher/contacts/
+  [OK] /teacher/notices/
+  [OK] /teacher/leaves/
+  [OK] /teacher/timetable/
+  [OK] /teacher/documents/
+  [OK] /teacher/question-bank/
+>>> >>> >>> >>> 
+  [parent child_id resolved: 3]
+>>> >>> ... ... ... ... >>> ... ... ... ... ... ... ... ... ... ... ...   File "<console>", line 12
+    all_fails += chk("PARENT PORTAL", parent_endpoints, pa)
+    ^^^^^^^^^
+SyntaxError: invalid syntax
+>>> >>> ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... 
+=== ADMIN PORTAL ===
+  [OK] /admin-portal/dashboard/
+  [OK] /admin-portal/admissions/
+  [OK] /admin-portal/users/
+  [OK] /admin-portal/roles/
+  [OK] /admin-portal/classes/
+  [OK] /admin-portal/subjects/
+  [OK] /admin-portal/vehicles/
+  [OK] /admin-portal/routes/
+  [OK] /admin-portal/transport-allocations/
+  [OK] /admin-portal/fee-structures/
+  [OK] /admin-portal/payments/
+  [OK] /admin-portal/library/books/
+  [OK] /admin-portal/notices/
+  [OK] /admin-portal/leaves/
+  [OK] /admin-portal/reports/
+  [OK] /admin-portal/audit-log/
+  [OK] /admin-portal/hostels/
+  [OK] /admin-portal/rooms/
+  [OK] /admin-portal/hostel-allocations/
+  [OK] /admin-portal/inventory/
+  [OK] /admin-portal/visitors/
+  [OK] /admin-portal/alumni/
+  [OK] /admin-portal/medical-logs/
+  [OK] /admin-portal/rank-list/?exam_schedule_id=1
+  [OK] /admin-portal/rank-list/overall/?class_id=1&exam_name=Unit_Test_1
+  [OK] /admin-portal/report-card/?student_id=1&exam_name=Unit_Test_1
+>>> >>> 
+=== WRITE WORKFLOW TESTS ===
+>>> >>> ... ... ... >>>   [OK] POST /teacher/attendance/ => {'detail': 'Attendance synced successfully.'}
+>>> >>> ... ... ... >>>   [OK] POST /teacher/homework/ => {'id': 11, 'detail': 'Homework assigned.'}
+>>> >>> ... ... ... >>>   [OK] POST /teacher/assignments/ => {'id': 11, 'detail': 'Assignment created.'}
+>>> >>> ... ... ... >>>   [OK] POST /teacher/marks-entry/ => {'detail': 'Marks submitted for publication.'}
+>>> >>> >>> >>> ... ... ... ... ...   [SKIP] POST /student/fees/pay/ (no pending fees)
+>>> ... ... ... ... ... ...   [OK] POST /parent/leaves/ => {'id': 6, 'detail': 'Leave request submitted.'}
+>>> ... ... ... >>>   [OK] POST /parent/ptm/ => {'id': 6, 'detail': 'Meeting requested.'}
+>>> >>> >>>   [OK] POST /parent/feedback/ => {'id': 6, 'detail': 'Feedback submitted.'}
+>>> >>> ... ... >>>   [OK] POST /admin-portal/notices/ => {'id': 11, 'detail': 'Notice sent.'}
+>>> >>> >>>   [OK] POST /admin-portal/rank-list/ => {'detail': 'Rank list generated for 1 student(s).'}
+>>> >>> >>> >>> ... ... ... ... ...   [OK] POST /admin-portal/leaves/6/decide/ => {'detail': 'Leave approved.'}
+>>> 
+=== RBAC CROSS-ROLE CHECKS (all should be 403) ===
+>>> Forbidden: /api/student/dashboard/
+>>>   [OK=403] teacher->student dashboard
+>>> Forbidden: /api/teacher/dashboard/
+>>>   [OK=403] student->teacher dashboard
+>>> Forbidden: /api/admin-portal/dashboard/
+>>>   [OK=403] parent->admin dashboard
+>>> Forbidden: /api/parent/dashboard/
+>>>   [OK=403] student->parent dashboard
+>>> >>> 
+=== SUMMARY: 1 endpoint(s) failed ===
+>>> ... ... 
+now exiting InteractiveConsole...

@@ -1,0 +1,275 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.django_migrations (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  app character varying NOT NULL,
+  name character varying NOT NULL,
+  applied timestamp with time zone NOT NULL,
+  CONSTRAINT django_migrations_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.django_content_type (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  app_label character varying NOT NULL,
+  model character varying NOT NULL,
+  CONSTRAINT django_content_type_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.auth_permission (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  content_type_id integer NOT NULL,
+  codename character varying NOT NULL,
+  CONSTRAINT auth_permission_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_permission_content_type_id_2f476e4b_fk_django_co FOREIGN KEY (content_type_id) REFERENCES public.django_content_type(id)
+);
+CREATE TABLE public.auth_group (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL UNIQUE,
+  CONSTRAINT auth_group_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.auth_group_permissions (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  group_id integer NOT NULL,
+  permission_id integer NOT NULL,
+  CONSTRAINT auth_group_permissions_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_group_permissions_group_id_b120cbf9_fk_auth_group_id FOREIGN KEY (group_id) REFERENCES public.auth_group(id),
+  CONSTRAINT auth_group_permissio_permission_id_84c5c92e_fk_auth_perm FOREIGN KEY (permission_id) REFERENCES public.auth_permission(id)
+);
+CREATE TABLE public.auth_user (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  password character varying NOT NULL,
+  last_login timestamp with time zone,
+  is_superuser boolean NOT NULL,
+  username character varying NOT NULL UNIQUE,
+  first_name character varying NOT NULL,
+  last_name character varying NOT NULL,
+  email character varying NOT NULL,
+  is_staff boolean NOT NULL,
+  is_active boolean NOT NULL,
+  date_joined timestamp with time zone NOT NULL,
+  CONSTRAINT auth_user_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.auth_user_groups (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id integer NOT NULL,
+  group_id integer NOT NULL,
+  CONSTRAINT auth_user_groups_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_user_groups_user_id_6a12ed8b_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id),
+  CONSTRAINT auth_user_groups_group_id_97559544_fk_auth_group_id FOREIGN KEY (group_id) REFERENCES public.auth_group(id)
+);
+CREATE TABLE public.auth_user_user_permissions (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  user_id integer NOT NULL,
+  permission_id integer NOT NULL,
+  CONSTRAINT auth_user_user_permissions_pkey PRIMARY KEY (id),
+  CONSTRAINT auth_user_user_permissions_user_id_a95ead1b_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id),
+  CONSTRAINT auth_user_user_permi_permission_id_1fbb5f2c_fk_auth_perm FOREIGN KEY (permission_id) REFERENCES public.auth_permission(id)
+);
+CREATE TABLE public.django_admin_log (
+  id integer GENERATED ALWAYS AS IDENTITY NOT NULL,
+  action_time timestamp with time zone NOT NULL,
+  object_id text,
+  object_repr character varying NOT NULL,
+  action_flag smallint NOT NULL CHECK (action_flag >= 0),
+  change_message text NOT NULL,
+  content_type_id integer,
+  user_id integer NOT NULL,
+  CONSTRAINT django_admin_log_pkey PRIMARY KEY (id),
+  CONSTRAINT django_admin_log_content_type_id_c4bce8eb_fk_django_co FOREIGN KEY (content_type_id) REFERENCES public.django_content_type(id),
+  CONSTRAINT django_admin_log_user_id_c564eba6_fk_auth_user_id FOREIGN KEY (user_id) REFERENCES public.auth_user(id)
+);
+CREATE TABLE public.admissions_admissionenquiry (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  registration_number character varying NOT NULL UNIQUE,
+  applicant_name character varying NOT NULL,
+  date_of_birth date NOT NULL,
+  gender character varying NOT NULL,
+  target_class character varying NOT NULL,
+  parent_name character varying NOT NULL,
+  parent_phone character varying NOT NULL,
+  parent_email character varying NOT NULL,
+  address text NOT NULL,
+  scholarship_applied boolean NOT NULL,
+  id_proof_document character varying,
+  status character varying NOT NULL,
+  reviewed_by character varying NOT NULL,
+  rejection_reason text NOT NULL,
+  submitted_at timestamp with time zone NOT NULL,
+  updated_at timestamp with time zone NOT NULL,
+  CONSTRAINT admissions_admissionenquiry_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_academicprogram (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL UNIQUE,
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  description text NOT NULL,
+  CONSTRAINT cms_academicprogram_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_achievement (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  title character varying NOT NULL,
+  description text NOT NULL,
+  achievement_date date NOT NULL,
+  cover_image character varying,
+  CONSTRAINT cms_achievement_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_campus (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  address text NOT NULL,
+  is_headquarters boolean NOT NULL,
+  CONSTRAINT cms_campus_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_cmspage (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  title character varying NOT NULL,
+  content_html text NOT NULL,
+  meta_description character varying NOT NULL,
+  updated_at timestamp with time zone NOT NULL,
+  CONSTRAINT cms_cmspage_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_contactsubmission (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  email character varying NOT NULL,
+  phone character varying NOT NULL,
+  message text NOT NULL,
+  submitted_at timestamp with time zone NOT NULL,
+  is_resolved boolean NOT NULL,
+  CONSTRAINT cms_contactsubmission_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_department (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL UNIQUE,
+  description text NOT NULL,
+  CONSTRAINT cms_department_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_document (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  title character varying NOT NULL,
+  file character varying NOT NULL,
+  audience character varying NOT NULL,
+  uploaded_at timestamp with time zone NOT NULL,
+  CONSTRAINT cms_document_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_event (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  title character varying NOT NULL,
+  description text NOT NULL,
+  event_date date NOT NULL,
+  venue character varying NOT NULL,
+  cover_image character varying,
+  CONSTRAINT cms_event_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_faq (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  question character varying NOT NULL,
+  answer text NOT NULL,
+  category character varying NOT NULL,
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  CONSTRAINT cms_faq_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_galleryalbum (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  CONSTRAINT cms_galleryalbum_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_leadershipmember (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  designation character varying NOT NULL,
+  photo character varying,
+  bio text NOT NULL,
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  CONSTRAINT cms_leadershipmember_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_newspost (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  title character varying NOT NULL,
+  slug character varying NOT NULL UNIQUE,
+  content text NOT NULL,
+  cover_image character varying,
+  published_date date NOT NULL,
+  is_published boolean NOT NULL,
+  CONSTRAINT cms_newspost_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_scholarshipinfo (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  description text NOT NULL,
+  eligibility text NOT NULL,
+  coverage_percent integer CHECK (coverage_percent >= 0),
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  CONSTRAINT cms_scholarshipinfo_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_schoolsettings (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  legal_name character varying NOT NULL,
+  brand_name character varying NOT NULL,
+  tagline character varying NOT NULL,
+  website_domain character varying NOT NULL,
+  company_type character varying NOT NULL,
+  established_year integer NOT NULL CHECK (established_year >= 0),
+  headquarters_address text NOT NULL,
+  CONSTRAINT cms_schoolsettings_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_schoolstat (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  label character varying NOT NULL,
+  value character varying NOT NULL,
+  icon character varying NOT NULL,
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  CONSTRAINT cms_schoolstat_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_technologypartner (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  name character varying NOT NULL,
+  logo character varying,
+  website_url character varying NOT NULL,
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  CONSTRAINT cms_technologypartner_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_testimonial (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  author_name character varying NOT NULL,
+  role character varying NOT NULL,
+  message text NOT NULL,
+  photo character varying,
+  is_featured boolean NOT NULL,
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  CONSTRAINT cms_testimonial_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_whychooseitem (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  title character varying NOT NULL,
+  description text NOT NULL,
+  icon character varying NOT NULL,
+  sort_order integer NOT NULL CHECK (sort_order >= 0),
+  CONSTRAINT cms_whychooseitem_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.cms_galleryimage (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  image character varying NOT NULL,
+  caption character varying NOT NULL,
+  uploaded_at timestamp with time zone NOT NULL,
+  album_id bigint NOT NULL,
+  CONSTRAINT cms_galleryimage_pkey PRIMARY KEY (id),
+  CONSTRAINT cms_galleryimage_album_id_796b7f5b_fk_cms_galleryalbum_id FOREIGN KEY (album_id) REFERENCES public.cms_galleryalbum(id)
+);
+CREATE TABLE public.cms_jobposting (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  title character varying NOT NULL,
+  description text NOT NULL,
+  is_open boolean NOT NULL,
+  posted_at timestamp with time zone NOT NULL,
+  department_id bigint,
+  CONSTRAINT cms_jobposting_pkey PRIMARY KEY (id),
+  CONSTRAINT cms_jobposting_department_id_338c25ca_fk_cms_department_id FOREIGN KEY (department_id) REFERENCES public.cms_department(id)
+);
+CREATE TABLE public.django_session (
+  session_key character varying NOT NULL,
+  session_data text NOT NULL,
+  expire_date timestamp with time zone NOT NULL,
+  CONSTRAINT django_session_pkey PRIMARY KEY (session_key)
+);
