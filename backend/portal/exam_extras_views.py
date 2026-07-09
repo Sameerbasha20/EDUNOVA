@@ -7,7 +7,7 @@ tables needed.
 Kept in its own file for the same reason as facilities_views.py: easy to
 find, doesn't bloat admin_views.py/views.py further.
 """
-from django.db import connection
+from django.db import DataError, connection
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -32,20 +32,24 @@ class RankListView(AdminMixin, APIView):
         exam_id = request.query_params.get("exam_schedule_id")
         if not exam_id or not table_exists("portal_result"):
             return Response([])
-        return Response(serialise(rows(
-            """
-            SELECT r.id, r.student_id, r.marks_obtained, r.grade_letter, r.rank_position,
-                   COALESCE(u.first_name || ' ' || u.last_name, u.username) AS student_name,
-                   se.roll_number
-            FROM portal_result r
-            JOIN auth_user u ON u.id = r.student_id
-            LEFT JOIN portal_exam_schedule e ON e.id = r.exam_schedule_id
-            LEFT JOIN portal_student_enrollment se ON se.student_id = r.student_id AND se.class_id = e.class_id
-            WHERE r.exam_schedule_id = %s
-            ORDER BY r.rank_position NULLS LAST, r.marks_obtained DESC
-            """,
-            [exam_id],
-        )))
+        try:
+            data = rows(
+                """
+                SELECT r.id, r.student_id, r.marks_obtained, r.grade_letter, r.rank_position,
+                       COALESCE(u.first_name || ' ' || u.last_name, u.username) AS student_name,
+                       se.roll_number
+                FROM portal_result r
+                JOIN auth_user u ON u.id = r.student_id
+                LEFT JOIN portal_exam_schedule e ON e.id = r.exam_schedule_id
+                LEFT JOIN portal_student_enrollment se ON se.student_id = r.student_id AND se.class_id = e.class_id
+                WHERE r.exam_schedule_id = %s
+                ORDER BY r.rank_position NULLS LAST, r.marks_obtained DESC
+                """,
+                [exam_id],
+            )
+        except DataError:
+            return Response({"detail": "Invalid exam_schedule_id."}, status=400)
+        return Response(serialise(data))
 
     def post(self, request):
         """Body: {exam_schedule_id}. Ranks all results for that exam by marks
@@ -53,7 +57,11 @@ class RankListView(AdminMixin, APIView):
         exam_id = request.data.get("exam_schedule_id")
         if not exam_id or not table_exists("portal_result"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
-        if not table_exists("portal_exam_schedule") or not row("SELECT 1 AS ok FROM portal_exam_schedule WHERE id=%s", [exam_id]):
+        try:
+            exam_exists = table_exists("portal_exam_schedule") and row("SELECT 1 AS ok FROM portal_exam_schedule WHERE id=%s", [exam_id])
+        except DataError:
+            return Response({"detail": "Invalid exam_schedule_id."}, status=400)
+        if not exam_exists:
             return Response({"detail": f"No exam schedule found with id {exam_id} — check the ID and try again."}, status=404)
         existing_results = row("SELECT COUNT(*)::int AS c FROM portal_result WHERE exam_schedule_id=%s", [exam_id])
         if not existing_results or existing_results["c"] == 0:
@@ -86,24 +94,28 @@ class OverallRankListView(AdminMixin, APIView):
         exam_name = request.query_params.get("exam_name")
         if not class_id or not exam_name or not table_exists("portal_result"):
             return Response([])
-        return Response(serialise(rows(
-            """
-            SELECT r.student_id,
-                   COALESCE(u.first_name || ' ' || u.last_name, u.username) AS student_name,
-                   se.roll_number,
-                   SUM(r.marks_obtained) AS total_marks,
-                   SUM(e.max_marks) AS max_total,
-                   RANK() OVER (ORDER BY SUM(r.marks_obtained) DESC) AS overall_rank
-            FROM portal_result r
-            JOIN portal_exam_schedule e ON e.id = r.exam_schedule_id
-            JOIN auth_user u ON u.id = r.student_id
-            LEFT JOIN portal_student_enrollment se ON se.student_id = r.student_id AND se.class_id = e.class_id
-            WHERE e.class_id = %s AND e.exam_name = %s
-            GROUP BY r.student_id, u.first_name, u.last_name, u.username, se.roll_number
-            ORDER BY overall_rank
-            """,
-            [class_id, exam_name],
-        )))
+        try:
+            data = rows(
+                """
+                SELECT r.student_id,
+                       COALESCE(u.first_name || ' ' || u.last_name, u.username) AS student_name,
+                       se.roll_number,
+                       SUM(r.marks_obtained) AS total_marks,
+                       SUM(e.max_marks) AS max_total,
+                       RANK() OVER (ORDER BY SUM(r.marks_obtained) DESC) AS overall_rank
+                FROM portal_result r
+                JOIN portal_exam_schedule e ON e.id = r.exam_schedule_id
+                JOIN auth_user u ON u.id = r.student_id
+                LEFT JOIN portal_student_enrollment se ON se.student_id = r.student_id AND se.class_id = e.class_id
+                WHERE e.class_id = %s AND e.exam_name = %s
+                GROUP BY r.student_id, u.first_name, u.last_name, u.username, se.roll_number
+                ORDER BY overall_rank
+                """,
+                [class_id, exam_name],
+            )
+        except DataError:
+            return Response({"detail": "Invalid class_id."}, status=400)
+        return Response(serialise(data))
 
 
 # =============================================================================
@@ -166,7 +178,10 @@ class ReportCardView(AdminMixin, APIView):
         exam_name = request.query_params.get("exam_name")
         if not student_id or not exam_name:
             return Response({"detail": "student_id and exam_name are required."}, status=400)
-        data = _report_card_data(student_id, exam_name)
+        try:
+            data = _report_card_data(student_id, exam_name)
+        except DataError:
+            return Response({"detail": "Invalid student_id."}, status=400)
         return Response(serialise(data))
 
 
