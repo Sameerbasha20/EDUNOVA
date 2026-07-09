@@ -520,6 +520,10 @@ class StudentListView(AdminMixin, APIView):
                    c.id AS class_id, (c.name || '-' || c.section) AS class_name, e.roll_number
             FROM auth_user u
             JOIN portal_student_profile sp ON sp.user_id = u.id
+            -- A user demoted away from Student (role change) keeps their
+            -- historical portal_student_profile row, but must stop showing
+            -- up in the live Students directory.
+            JOIN portal_user_profile p ON p.user_id = u.id AND p.user_type = 'Student'
             LEFT JOIN LATERAL (
                 SELECT * FROM portal_student_enrollment se
                 WHERE se.student_id = u.id ORDER BY se.academic_year DESC, se.id DESC LIMIT 1
@@ -558,6 +562,10 @@ class TeacherListView(AdminMixin, APIView):
                    tp.employee_code, tp.department, tp.qualification, tp.specialization
             FROM auth_user u
             JOIN portal_teacher_profile tp ON tp.user_id = u.id
+            -- A user demoted away from Teacher (role change) keeps their
+            -- historical portal_teacher_profile row, but must stop showing
+            -- up in the live Teachers directory.
+            JOIN portal_user_profile p ON p.user_id = u.id AND p.user_type = 'Teacher'
         """
         conditions = []
         params = []
@@ -716,12 +724,22 @@ class LibraryIssueView(AdminMixin, APIView):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         book_id = request.data.get("book_id")
         borrower_id = request.data.get("borrower_id")
-        days = int(request.data.get("loan_days", 14))
-        book = row("SELECT available_quantity FROM portal_book WHERE id=%s", [book_id])
+        if not book_id or not borrower_id:
+            return Response({"detail": "book_id and borrower_id are required."}, status=400)
+        try:
+            days = int(request.data.get("loan_days", 14))
+        except (TypeError, ValueError):
+            return Response({"detail": "loan_days must be a number."}, status=400)
+        try:
+            book = row("SELECT available_quantity FROM portal_book WHERE id=%s", [book_id])
+        except DataError:
+            return Response({"detail": "Invalid book_id."}, status=400)
         if not book:
             return Response({"detail": "Book not found."}, status=404)
         if book["available_quantity"] < 1:
             return Response({"detail": "No copies available."}, status=400)
+        if not row("SELECT 1 AS ok FROM auth_user WHERE id=%s", [borrower_id]):
+            return Response({"detail": "Borrower not found."}, status=400)
         due = date.today() + timedelta(days=days)
         with connection.cursor() as cursor:
             cursor.execute(
@@ -769,13 +787,19 @@ class NoticeBroadcastView(AdminMixin, APIView):
         if not table_exists("portal_notification"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         d = request.data
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO portal_notification (sender_id, recipient_type, target_class_id, title, message) "
-                "VALUES (%s,%s,%s,%s,%s) RETURNING id",
-                [request.user.id, d.get("recipient_type", "All"), d.get("target_class_id"), d.get("title"), d.get("message")],
-            )
-            nid = cursor.fetchone()[0]
+        if not d.get("title") or not d.get("message"):
+            return Response({"detail": "title and message are required."}, status=400)
+        target_class_id = d.get("target_class_id") or None
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO portal_notification (sender_id, recipient_type, target_class_id, title, message) "
+                    "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+                    [request.user.id, d.get("recipient_type", "All"), target_class_id, d.get("title"), d.get("message")],
+                )
+                nid = cursor.fetchone()[0]
+        except (IntegrityError, DataError):
+            return Response({"detail": "Invalid target_class_id."}, status=400)
         log_action(request.user, "notice.broadcast", "notification", nid, {"recipient_type": d.get("recipient_type", "All")})
         return Response({"id": nid, "detail": "Notice sent."})
 
@@ -805,6 +829,11 @@ class LeaveApprovalListView(AdminMixin, APIView):
         decision = request.data.get("decision")
         if decision not in ("Approved", "Rejected"):
             return Response({"detail": "decision must be Approved or Rejected."}, status=400)
+        leave = row("SELECT status FROM portal_leave WHERE id=%s", [leave_id])
+        if not leave:
+            return Response({"detail": "Leave request not found."}, status=404)
+        if leave["status"] != "Pending":
+            return Response({"detail": f"Already {leave['status'].lower()}."}, status=400)
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE portal_leave SET status=%s, approved_by=%s WHERE id=%s",

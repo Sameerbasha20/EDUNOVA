@@ -50,6 +50,10 @@ class AdminDirectoryTests(TestCase):
         )
         with connection.cursor() as cursor:
             cursor.execute(
+                "INSERT INTO portal_user_profile (user_id, user_type) VALUES (%s, 'Student')",
+                [self.student.id],
+            )
+            cursor.execute(
                 "INSERT INTO portal_student_profile (user_id, admission_number) VALUES (%s, 'DIR-STU-001')",
                 [self.student.id],
             )
@@ -64,6 +68,10 @@ class AdminDirectoryTests(TestCase):
             first_name="Dir", last_name="Teacher",
         )
         with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO portal_user_profile (user_id, user_type) VALUES (%s, 'Teacher')",
+                [self.teacher.id],
+            )
             cursor.execute(
                 "INSERT INTO portal_teacher_profile (user_id, employee_code, department) VALUES (%s, 'DIR-EMP-001', 'Mathematics')",
                 [self.teacher.id],

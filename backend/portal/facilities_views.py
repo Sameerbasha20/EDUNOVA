@@ -9,7 +9,7 @@ and don't bloat admin_views.py further.
 """
 from datetime import date
 
-from django.db import connection
+from django.db import DataError, IntegrityError, connection
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -49,12 +49,17 @@ class RoomView(AdminMixin, APIView):
         if not table_exists("portal_room"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         d = request.data
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO portal_room (hostel_id, room_number, capacity) VALUES (%s,%s,%s) RETURNING id",
-                [d.get("hostel_id"), d.get("room_number"), d.get("capacity", 1)],
-            )
-            new_id = cursor.fetchone()[0]
+        if not d.get("hostel_id") or not table_exists("portal_hostel") or not row("SELECT 1 AS ok FROM portal_hostel WHERE id=%s", [d.get("hostel_id")]):
+            return Response({"detail": "Invalid hostel_id."}, status=400)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO portal_room (hostel_id, room_number, capacity) VALUES (%s,%s,%s) RETURNING id",
+                    [d.get("hostel_id"), d.get("room_number"), d.get("capacity", 1)],
+                )
+                new_id = cursor.fetchone()[0]
+        except (IntegrityError, DataError):
+            return Response({"detail": "A room with this number already exists in this hostel."}, status=400)
         log_action(request.user, "hostel.room.create", "portal_room", new_id, dict(d))
         return Response({"id": new_id, "detail": "Room added."})
 
@@ -83,18 +88,23 @@ class HostelAllocationView(AdminMixin, APIView):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         student_id = request.data.get("student_id")
         room_id = request.data.get("room_id")
+        if not student_id or not row("SELECT 1 AS ok FROM auth_user WHERE id=%s", [student_id]):
+            return Response({"detail": "Student not found."}, status=400)
         room = row("SELECT capacity, occupied_beds FROM portal_room WHERE id=%s", [room_id])
         if not room:
             return Response({"detail": "Room not found."}, status=404)
         if room["occupied_beds"] >= room["capacity"]:
             return Response({"detail": "Room is already at full capacity."}, status=400)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO portal_hostel_allocation (student_id, room_id) VALUES (%s,%s) RETURNING id",
-                [student_id, room_id],
-            )
-            alloc_id = cursor.fetchone()[0]
-            cursor.execute("UPDATE portal_room SET occupied_beds = occupied_beds + 1 WHERE id=%s", [room_id])
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO portal_hostel_allocation (student_id, room_id) VALUES (%s,%s) RETURNING id",
+                    [student_id, room_id],
+                )
+                alloc_id = cursor.fetchone()[0]
+                cursor.execute("UPDATE portal_room SET occupied_beds = occupied_beds + 1 WHERE id=%s", [room_id])
+        except IntegrityError:
+            return Response({"detail": "This student is already allocated to this room today."}, status=400)
         log_action(request.user, "hostel.allocate", "student", student_id, {"room_id": room_id})
         return Response({"id": alloc_id, "detail": "Student allocated to room."})
 
@@ -200,14 +210,20 @@ class InventoryView(AdminMixin, APIView):
         if not table_exists("portal_inventory"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         item_id = request.data.get("id")
-        delta = int(request.data.get("quantity_delta", 0))
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE portal_inventory SET quantity = GREATEST(quantity + %s, 0), updated_at = now() "
-                "WHERE id=%s RETURNING quantity",
-                [delta, item_id],
-            )
-            result = cursor.fetchone()
+        try:
+            delta = int(request.data.get("quantity_delta", 0))
+        except (TypeError, ValueError):
+            return Response({"detail": "quantity_delta must be a number."}, status=400)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE portal_inventory SET quantity = GREATEST(quantity + %s, 0), updated_at = now() "
+                    "WHERE id=%s RETURNING quantity",
+                    [delta, item_id],
+                )
+                result = cursor.fetchone()
+        except DataError:
+            return Response({"detail": "Invalid item id."}, status=400)
         if not result:
             return Response({"detail": "Item not found."}, status=404)
         log_action(request.user, "inventory.adjust", "portal_inventory", item_id, {"delta": delta})
@@ -284,15 +300,21 @@ class AlumniView(AdminMixin, APIView):
         if not table_exists("portal_alumni"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         d = request.data
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO portal_alumni (student_id, graduation_year, current_occupation, higher_studies_details) "
-                "VALUES (%s,%s,%s,%s) ON CONFLICT (student_id) DO UPDATE SET "
-                "graduation_year=EXCLUDED.graduation_year, current_occupation=EXCLUDED.current_occupation, "
-                "higher_studies_details=EXCLUDED.higher_studies_details RETURNING id",
-                [d.get("student_id"), d.get("graduation_year"), d.get("current_occupation"), d.get("higher_studies_details")],
-            )
-            new_id = cursor.fetchone()[0]
+        student_id = d.get("student_id")
+        if not student_id or not row("SELECT 1 AS ok FROM auth_user WHERE id=%s", [student_id]):
+            return Response({"detail": "Student not found."}, status=400)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO portal_alumni (student_id, graduation_year, current_occupation, higher_studies_details) "
+                    "VALUES (%s,%s,%s,%s) ON CONFLICT (student_id) DO UPDATE SET "
+                    "graduation_year=EXCLUDED.graduation_year, current_occupation=EXCLUDED.current_occupation, "
+                    "higher_studies_details=EXCLUDED.higher_studies_details RETURNING id",
+                    [student_id, d.get("graduation_year"), d.get("current_occupation"), d.get("higher_studies_details")],
+                )
+                new_id = cursor.fetchone()[0]
+        except DataError:
+            return Response({"detail": "Invalid graduation_year."}, status=400)
         log_action(request.user, "alumni.upsert", "portal_alumni", new_id, dict(d))
         return Response({"id": new_id, "detail": "Alumni record saved."})
 
@@ -322,14 +344,17 @@ class MedicalLogView(AdminMixin, APIView):
         if not table_exists("portal_medical_log"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         d = request.data
+        student_id = d.get("student_id")
+        if not student_id or not row("SELECT 1 AS ok FROM auth_user WHERE id=%s", [student_id]):
+            return Response({"detail": "Student not found."}, status=400)
         with connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO portal_medical_log (student_id, symptoms, treatment_given, doctor_notes, recorded_by) "
                 "VALUES (%s,%s,%s,%s,%s) RETURNING id",
-                [d.get("student_id"), d.get("symptoms"), d.get("treatment_given"), d.get("doctor_notes"), request.user.id],
+                [student_id, d.get("symptoms"), d.get("treatment_given"), d.get("doctor_notes"), request.user.id],
             )
             new_id = cursor.fetchone()[0]
-        log_action(request.user, "medical.log.create", "portal_medical_log", new_id, {"student_id": d.get("student_id")})
+        log_action(request.user, "medical.log.create", "portal_medical_log", new_id, {"student_id": student_id})
         return Response({"id": new_id, "detail": "Medical record saved."})
 
 
