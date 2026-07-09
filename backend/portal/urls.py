@@ -30,6 +30,7 @@ urlpatterns = [
     path("student/certificates/", views.CertificateListView.as_view()),
     path("student/announcements/", views.AnnouncementListView.as_view()),
     path("student/events/", views.EventListView.as_view()),
+    path("student/messages/", views.StudentMessageThreadView.as_view()),
     path("student/hostel/", facilities_views.StudentHostelView.as_view()),
     path("student/medical-records/", facilities_views.StudentMedicalView.as_view()),
     path("student/report-card/", exam_extras_views.StudentReportCardView.as_view()),

@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from uuid import uuid4
 
+from django.contrib.auth import get_user_model
 from django.db import connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -8,6 +9,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 
 from .roles import IsStudent
+
+User = get_user_model()
 
 
 def table_exists(table_name):
@@ -92,13 +95,14 @@ def student_profile_payload(user):
         "gender": "",
         "blood_group": "",
         "status": "Active",
+        "qr_id_code": None,
     }
     if table_exists("portal_user_profile"):
         p = row("SELECT phone_number FROM portal_user_profile WHERE user_id=%s", [user.id])
         if p:
             base["phone_number"] = p.get("phone_number") or ""
     if table_exists("portal_student_profile"):
-        sp = row("SELECT admission_number, date_of_birth, gender, blood_group, status FROM portal_student_profile WHERE user_id=%s", [user.id])
+        sp = row("SELECT admission_number, qr_id_code, date_of_birth, gender, blood_group, status FROM portal_student_profile WHERE user_id=%s", [user.id])
         if sp:
             base.update(serialise(sp))
     cls = current_class_for_student(user.id)
@@ -530,3 +534,53 @@ class EventListView(StudentOnlyMixin, APIView):
         if not table_exists("cms_event"):
             return Response([])
         return Response(serialise(rows("SELECT id, title, description, event_date, venue FROM cms_event ORDER BY event_date DESC")))
+
+
+class StudentMessageThreadView(StudentOnlyMixin, APIView):
+    """Same portal_message table the Teacher/Parent portals already use —
+    lets a student message a staff member (e.g. the Support page)."""
+
+    def get(self, request):
+        uid = request.user.id
+        other = request.query_params.get("with")
+        if not table_exists("portal_message"):
+            return Response([])
+        if other:
+            data = rows(
+                """
+                SELECT m.id, m.sender_id AS sender, m.receiver_id AS receiver, m.message_text, m.created_at
+                FROM portal_message m
+                WHERE (m.sender_id=%s AND m.receiver_id=%s) OR (m.sender_id=%s AND m.receiver_id=%s)
+                ORDER BY m.created_at
+                """,
+                [uid, other, other, uid],
+            )
+        else:
+            data = rows(
+                """
+                SELECT DISTINCT ON (CASE WHEN sender_id=%s THEN receiver_id ELSE sender_id END)
+                       m.id, m.sender_id AS sender, m.receiver_id AS receiver, m.message_text, m.created_at
+                FROM portal_message m
+                WHERE m.sender_id=%s OR m.receiver_id=%s
+                ORDER BY CASE WHEN sender_id=%s THEN receiver_id ELSE sender_id END, m.created_at DESC
+                """,
+                [uid, uid, uid, uid],
+            )
+        return Response(serialise(data))
+
+    def post(self, request):
+        if not table_exists("portal_message"):
+            return Response({"detail": "Portal schema has not been applied."}, status=400)
+        receiver_id = request.data.get("receiver")
+        message_text = (request.data.get("message_text") or "").strip()
+        if not receiver_id or not message_text:
+            return Response({"detail": "receiver and message_text are required."}, status=400)
+        if not User.objects.filter(id=receiver_id).exists():
+            return Response({"detail": "Recipient not found."}, status=400)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO portal_message (sender_id, receiver_id, message_text) VALUES (%s,%s,%s) RETURNING id",
+                [request.user.id, receiver_id, message_text],
+            )
+            mid = cursor.fetchone()[0]
+        return Response({"id": mid, "detail": "Message sent."})
