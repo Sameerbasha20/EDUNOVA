@@ -90,3 +90,17 @@ class SimpleTableViewIntegrityErrorTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json()["detail"], "No copies available.")
+
+    def test_blank_optional_fk_field_does_not_500(self):
+        """warden_id is an optional integer FK; the admin UI sends "" (not
+        omitted, not null) when the field is left blank -- Postgres rejects
+        "" for an integer column outright, which previously bubbled up as an
+        unhandled DataError -> HTTP 500 (reproduced live via Add Hostel with
+        the "Warden user ID (optional)" field left empty)."""
+        resp = self.client.post(
+            "/api/admin-portal/hostels/",
+            data={"name": "Crud Err Hostel", "type": "Boys", "warden_id": ""},
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(resp.status_code, 200)

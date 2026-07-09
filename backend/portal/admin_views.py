@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db import IntegrityError, connection, transaction
+from django.db import DataError, IntegrityError, connection, transaction
 from django.utils.crypto import get_random_string
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -526,7 +526,11 @@ class SimpleTableView(AdminMixin, APIView):
     def post(self, request):
         if not table_exists(self.table):
             return Response({"detail": "Table not found. Apply the schema extension SQL first."}, status=400)
-        values = [request.data.get(c) for c in self.columns]
+        # "" for an optional numeric/date/FK field (e.g. warden_id left blank)
+        # is not a valid value for those column types -- treat it as "not
+        # provided" the same way None is, instead of sending literal "" to
+        # Postgres and letting it reject the whole insert.
+        values = [None if request.data.get(c) == "" else request.data.get(c) for c in self.columns]
         placeholders = ",".join(["%s"] * len(self.columns))
         col_sql = ",".join(self.columns)
         try:
@@ -538,6 +542,9 @@ class SimpleTableView(AdminMixin, APIView):
             # number, ...) previously bubbled up as an unhandled 500 with a
             # raw Django debug traceback instead of a normal validation error.
             return Response({"detail": "A record with one of these unique values already exists."}, status=400)
+        except DataError:
+            # e.g. non-numeric text in an integer field, malformed date.
+            return Response({"detail": "One of the fields has an invalid value for its type."}, status=400)
         log_action(request.user, f"{self.table}.create", self.table, new_id, dict(zip(self.columns, [str(v) for v in values])))
         return Response({"id": new_id, "detail": "Created."})
 
