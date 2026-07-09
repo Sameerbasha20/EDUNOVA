@@ -20,6 +20,13 @@ CREATE TABLE IF NOT EXISTS public.portal_parent_profile (
   is_verified boolean NOT NULL DEFAULT false
 );
 
+-- Parents originally had no ID number at all (students have admission_number,
+-- teachers have employee_code). ALTER + IF NOT EXISTS rather than adding the
+-- column to the CREATE TABLE above, since that only runs for a table that
+-- doesn't exist yet -- this file is re-applied against databases where
+-- portal_parent_profile was already created.
+ALTER TABLE public.portal_parent_profile ADD COLUMN IF NOT EXISTS parent_code varchar(50) UNIQUE;
+
 CREATE TABLE IF NOT EXISTS public.portal_teacher_profile (
   user_id integer PRIMARY KEY REFERENCES public.auth_user(id) ON DELETE CASCADE,
   employee_code varchar(50) UNIQUE,

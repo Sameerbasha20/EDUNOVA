@@ -140,10 +140,11 @@ def _generate_credentials(enquiry):
                     [student.id],
                 )
             if table_exists("portal_parent_profile"):
+                parent_code = f"PAR-{get_random_string(8).upper()}"
                 cursor.execute(
-                    "INSERT INTO portal_parent_profile (user_id, address) VALUES (%s,%s) "
+                    "INSERT INTO portal_parent_profile (user_id, address, parent_code) VALUES (%s,%s,%s) "
                     "ON CONFLICT (user_id) DO NOTHING",
-                    [parent.id, enquiry.address],
+                    [parent.id, enquiry.address, parent_code],
                 )
             if table_exists("portal_student_profile"):
                 admission_number = f"STU-{enquiry.registration_number[-8:]}"
@@ -165,6 +166,53 @@ def _generate_credentials(enquiry):
         "parent_account_reused": not parent_is_new,
     }
     return student, parent, credentials
+
+
+def assign_role_id(user, role):
+    """Create (or backfill) the role-specific profile row with a fresh ID
+    number for a user who doesn't already have one: admission_number
+    (Student), employee_code (Teacher), parent_code (Parent). Idempotent --
+    returns the existing id_number untouched if one is already set. Returns
+    None for roles with no such concept (Admin/Employee)."""
+    if role == "Student" and table_exists("portal_student_profile"):
+        existing = row("SELECT admission_number FROM portal_student_profile WHERE user_id=%s", [user.id])
+        if existing:
+            return existing["admission_number"]
+        admission_number = f"STU-{get_random_string(8).upper()}"
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO portal_student_profile (user_id, admission_number) VALUES (%s,%s)",
+                [user.id, admission_number],
+            )
+        return admission_number
+
+    if role == "Teacher" and table_exists("portal_teacher_profile"):
+        existing = row("SELECT employee_code FROM portal_teacher_profile WHERE user_id=%s", [user.id])
+        if existing and existing["employee_code"]:
+            return existing["employee_code"]
+        employee_code = f"EMP-{get_random_string(8).upper()}"
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO portal_teacher_profile (user_id, employee_code) VALUES (%s,%s) "
+                "ON CONFLICT (user_id) DO UPDATE SET employee_code=EXCLUDED.employee_code",
+                [user.id, employee_code],
+            )
+        return employee_code
+
+    if role == "Parent" and table_exists("portal_parent_profile"):
+        existing = row("SELECT parent_code FROM portal_parent_profile WHERE user_id=%s", [user.id])
+        if existing and existing["parent_code"]:
+            return existing["parent_code"]
+        parent_code = f"PAR-{get_random_string(8).upper()}"
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO portal_parent_profile (user_id, parent_code) VALUES (%s,%s) "
+                "ON CONFLICT (user_id) DO UPDATE SET parent_code=EXCLUDED.parent_code",
+                [user.id, parent_code],
+            )
+        return parent_code
+
+    return None
 
 
 class AdmissionListView(AdminMixin, APIView):
@@ -271,8 +319,12 @@ class UserListView(AdminMixin, APIView):
                     "ON CONFLICT (user_id) DO UPDATE SET user_type=EXCLUDED.user_type",
                     [user.id, role, d.get("phone_number", "")],
                 )
-        log_action(request.user, "user.create", "user", user.id, {"role": role})
-        return Response({"id": user.id, "username": user.username, "temp_password": temp_password, "role": role})
+        id_number = assign_role_id(user, role)
+        log_action(request.user, "user.create", "user", user.id, {"role": role, "id_number": id_number})
+        return Response({
+            "id": user.id, "username": user.username, "temp_password": temp_password,
+            "role": role, "id_number": id_number,
+        })
 
 
 class UserDetailView(AdminMixin, APIView):
@@ -298,7 +350,8 @@ class UserDetailView(AdminMixin, APIView):
                         "ON CONFLICT (user_id) DO UPDATE SET user_type=EXCLUDED.user_type",
                         [user_id, new_role],
                     )
-            log_action(request.user, "user.set_role", "user", user_id, {"role": new_role})
+            id_number = assign_role_id(target, new_role)
+            log_action(request.user, "user.set_role", "user", user_id, {"role": new_role, "id_number": id_number})
         return Response({"detail": "Updated."})
 
     def post(self, request, user_id):
