@@ -1,6 +1,6 @@
 import { GraduationCap, ShieldCheck } from "lucide-react";
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import * as otpAuth from "../../../lib/useOtpAuth";
 
 // One login page for every role — the backend resolves which portal a user
@@ -26,27 +26,6 @@ const PORTALS = {
   },
 };
 
-function isTokenValid(token) {
-  if (!token) return false;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.exp * 1000 > Date.now();
-  } catch {
-    return false;
-  }
-}
-
-// If a session from a previous login is still valid, skip straight to that
-// portal instead of showing the form again.
-function existingSessionPath() {
-  for (const portal of Object.values(PORTALS)) {
-    const access = localStorage.getItem(portal.keys.access);
-    const refresh = localStorage.getItem(portal.keys.refresh);
-    if (isTokenValid(access) || isTokenValid(refresh)) return portal.path;
-  }
-  return null;
-}
-
 export default function Login() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1); // 1 = credentials, 2 = otp
@@ -56,9 +35,6 @@ export default function Login() {
   const [userId, setUserId] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const redirectTo = existingSessionPath();
-  if (redirectTo) return <Navigate to={redirectTo} replace />;
 
   async function handleCredentials(e) {
     e.preventDefault();
