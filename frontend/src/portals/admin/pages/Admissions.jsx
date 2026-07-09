@@ -13,6 +13,8 @@ const NEXT_LABEL = {
 
 export default function Admissions() {
   const [items, setItems] = useState(null);
+  const [classes, setClasses] = useState([]);
+  const [classPicks, setClassPicks] = useState({});
   const [busy, setBusy] = useState(null);
   const [toast, setToast] = useState("");
   const [credentials, setCredentials] = useState(null);
@@ -22,11 +24,32 @@ export default function Admissions() {
   }
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    api.get("/admin-portal/classes/").then(({ data }) => setClasses(data)).catch(() => setClasses([]));
+  }, []);
 
-  async function advance(regNo) {
+  // Pre-select a class for each Fee_Pending application when its target_class
+  // text unambiguously matches exactly one real class (e.g. "Grade 6" with
+  // only one section) -- the admin can still override the section picked.
+  useEffect(() => {
+    if (!items || !classes.length) return;
+    setClassPicks((prev) => {
+      const next = { ...prev };
+      items.forEach((a) => {
+        if (a.status !== "Fee_Pending" || next[a.registration_number]) return;
+        const matches = classes.filter((c) => c.name.toLowerCase() === (a.target_class || "").toLowerCase());
+        if (matches.length === 1) next[a.registration_number] = String(matches[0].id);
+      });
+      return next;
+    });
+  }, [items, classes]);
+
+  async function advance(regNo, isConfirming) {
     setBusy(regNo);
     try {
-      const { data } = await api.post(`/admin-portal/admissions/${regNo}/action/`, { action: "advance" });
+      const body = { action: "advance" };
+      if (isConfirming && classPicks[regNo]) body.class_id = classPicks[regNo];
+      const { data } = await api.post(`/admin-portal/admissions/${regNo}/action/`, body);
       if (data.credentials) setCredentials(data.credentials);
       setToast(`Application moved to ${data.status}.`);
       load();
@@ -65,6 +88,12 @@ export default function Admissions() {
           ) : (
             <p className="text-sm">Parent account <b>{credentials.parent_username}</b> already existed and was reused.</p>
           )}
+          {credentials.class_assigned && (
+            <p className="text-sm mt-1">Enrolled into <b>{credentials.class_assigned}</b> — fees, timetable, and LMS access now apply automatically.</p>
+          )}
+          {credentials.class_assignment_error && (
+            <p className="text-sm text-danger mt-1">Class not assigned: {credentials.class_assignment_error} Assign one from Classes & Subjects.</p>
+          )}
           <button onClick={() => setCredentials(null)} className="mt-2 text-xs text-ink-secondary hover:underline">Dismiss</button>
         </Card>
       )}
@@ -84,10 +113,20 @@ export default function Admissions() {
               </div>
               <div className="flex items-center gap-2">
                 <Badge tone={TONE[a.status] || "slate"}>{a.status}</Badge>
+                {a.status === "Fee_Pending" && (
+                  <select
+                    value={classPicks[a.registration_number] || ""}
+                    onChange={(e) => setClassPicks({ ...classPicks, [a.registration_number]: e.target.value })}
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                  >
+                    <option value="">Assign class…</option>
+                    {classes.map((c) => <option key={c.id} value={c.id}>{c.name}-{c.section}</option>)}
+                  </select>
+                )}
                 {NEXT_LABEL[a.status] && (
                   <button
                     disabled={busy === a.registration_number}
-                    onClick={() => advance(a.registration_number)}
+                    onClick={() => advance(a.registration_number, a.status === "Fee_Pending")}
                     className="bg-academic-blue text-white text-sm px-3 py-1.5 rounded-lg disabled:opacity-60"
                   >
                     {NEXT_LABEL[a.status]}

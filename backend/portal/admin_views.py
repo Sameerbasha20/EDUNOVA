@@ -99,11 +99,24 @@ def _ensure_group(name):
     return grp
 
 
-def _generate_credentials(enquiry):
+def current_academic_year():
+    """Indian school year convention: April-March, expressed as 'YYYY-YY'."""
+    today = date.today()
+    start_year = today.year if today.month >= 4 else today.year - 1
+    return f"{start_year}-{(start_year + 1) % 100:02d}"
+
+
+def _generate_credentials(enquiry, class_id=None):
     """Creates a Parent account (if needed) + Student account for a Confirmed
     admission enquiry, and links both back onto portal_* tables. Idempotent:
     if the enquiry already has student_user_id/parent_user_id set, does
-    nothing and returns the existing accounts."""
+    nothing and returns the existing accounts.
+
+    If class_id is given, also enrolls the student into that class for the
+    current academic year (portal_student_enrollment) -- this is the pivot
+    the rest of daily operations (fees, timetable, LMS access) already
+    derive live from, so assigning a class here is what actually activates
+    them, not a separate step per downstream feature."""
     if enquiry.student_user_id:
         student = User.objects.filter(id=enquiry.student_user_id).first()
         parent = User.objects.filter(id=enquiry.parent_user_id).first() if enquiry.parent_user_id else None
@@ -164,6 +177,29 @@ def _generate_credentials(enquiry):
                     [student.id, parent.id, admission_number, enquiry.date_of_birth, enquiry.gender],
                 )
 
+            class_name = None
+            class_assignment_error = None
+            if class_id:
+                if table_exists("portal_student_enrollment") and table_exists("portal_class"):
+                    class_row = row("SELECT id, name, section FROM portal_class WHERE id=%s", [class_id])
+                    if class_row:
+                        academic_year = current_academic_year()
+                        next_roll = row(
+                            "SELECT COALESCE(MAX(roll_number), 0) + 1 AS n FROM portal_student_enrollment "
+                            "WHERE class_id=%s AND academic_year=%s",
+                            [class_id, academic_year],
+                        )["n"]
+                        cursor.execute(
+                            "INSERT INTO portal_student_enrollment (student_id, class_id, academic_year, roll_number) "
+                            "VALUES (%s,%s,%s,%s) ON CONFLICT (student_id, class_id, academic_year) DO NOTHING",
+                            [student.id, class_id, academic_year, next_roll],
+                        )
+                        class_name = f"{class_row['name']}-{class_row['section']}"
+                    else:
+                        class_assignment_error = "Class not found."
+                else:
+                    class_assignment_error = "Portal schema has not been applied."
+
         enquiry.student_user_id = student.id
         enquiry.parent_user_id = parent.id
         enquiry.save(update_fields=["student_user_id", "parent_user_id"])
@@ -174,6 +210,8 @@ def _generate_credentials(enquiry):
         "parent_username": parent.username,
         "parent_temp_password": parent_temp_password if parent_is_new else None,
         "parent_account_reused": not parent_is_new,
+        "class_assigned": class_name,
+        "class_assignment_error": class_assignment_error,
     }
     return student, parent, credentials
 
@@ -247,9 +285,13 @@ class AdmissionListView(AdminMixin, APIView):
 
 
 class AdmissionActionView(AdminMixin, APIView):
-    """POST { action: 'advance' | 'reject' | 'confirm', reason? } to move an
-    application through Verification -> Screening -> Fee_Pending -> Confirmed,
-    or reject it at any stage. 'confirm' also generates student+parent logins."""
+    """POST { action: 'advance' | 'reject' | 'confirm', reason?, class_id? } to
+    move an application through Verification -> Screening -> Fee_Pending ->
+    Confirmed, or reject it at any stage. Advancing to Confirmed generates
+    student+parent logins, and if class_id is given, also enrolls the
+    student into that class (which is what actually makes their fees,
+    timetable, and LMS access apply -- those are computed live from class
+    enrollment, not separate steps)."""
 
     def post(self, request, registration_number):
         try:
@@ -276,7 +318,8 @@ class AdmissionActionView(AdminMixin, APIView):
             log_action(request.user, "admission.advance", "admission", registration_number, {"to": nxt})
             payload = {"status": enquiry.status}
             if nxt == "Confirmed":
-                student, parent, credentials = _generate_credentials(enquiry)
+                class_id = request.data.get("class_id")
+                student, parent, credentials = _generate_credentials(enquiry, class_id=class_id)
                 if credentials:
                     payload["credentials"] = credentials
                     log_action(request.user, "admission.credentials_generated", "admission", registration_number,
