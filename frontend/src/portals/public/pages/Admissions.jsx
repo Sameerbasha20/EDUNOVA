@@ -26,6 +26,8 @@ const EMPTY_FORM = {
   parent_email: '',
   address: '',
   scholarship_applied: false,
+  needs_transport: false,
+  preferred_pickup_point: '',
 }
 
 const CLASSES = [
@@ -382,6 +384,25 @@ export default function Admissions() {
                       />
                       I would like to apply for a scholarship
                     </label>
+
+                    <label className="flex items-center gap-3 text-sm text-text-primary bg-bg-light rounded-xl p-4 border border-gray-100">
+                      <input
+                        type="checkbox"
+                        checked={form.needs_transport}
+                        onChange={update('needs_transport')}
+                        className="w-4 h-4"
+                      />
+                      I would like to use school transport
+                    </label>
+
+                    {form.needs_transport && (
+                      <input
+                        placeholder="Preferred pickup point / nearest landmark"
+                        value={form.preferred_pickup_point}
+                        onChange={update('preferred_pickup_point')}
+                        className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-primary"
+                      />
+                    )}
 
                     {status === 'error' && (
                       <div className="bg-error/10 text-error text-sm rounded-xl p-4 border border-error/20">

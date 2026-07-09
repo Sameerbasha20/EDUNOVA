@@ -14,7 +14,10 @@ const NEXT_LABEL = {
 export default function Admissions() {
   const [items, setItems] = useState(null);
   const [classes, setClasses] = useState([]);
+  const [routes, setRoutes] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [classPicks, setClassPicks] = useState({});
+  const [transportPicks, setTransportPicks] = useState({});
   const [busy, setBusy] = useState(null);
   const [toast, setToast] = useState("");
   const [credentials, setCredentials] = useState(null);
@@ -26,6 +29,8 @@ export default function Admissions() {
   useEffect(() => { load(); }, []);
   useEffect(() => {
     api.get("/admin-portal/classes/").then(({ data }) => setClasses(data)).catch(() => setClasses([]));
+    api.get("/admin-portal/routes/").then(({ data }) => setRoutes(data)).catch(() => setRoutes([]));
+    api.get("/admin-portal/vehicles/").then(({ data }) => setVehicles(data)).catch(() => setVehicles([]));
   }, []);
 
   // Pre-select a class for each Fee_Pending application when its target_class
@@ -44,11 +49,36 @@ export default function Admissions() {
     });
   }, [items, classes]);
 
+  // Pre-fill the pickup point text from what the family entered at intake.
+  useEffect(() => {
+    if (!items) return;
+    setTransportPicks((prev) => {
+      const next = { ...prev };
+      items.forEach((a) => {
+        if (!a.needs_transport || next[a.registration_number]) return;
+        next[a.registration_number] = { route_id: "", vehicle_id: "", pickup_point: a.preferred_pickup_point || "" };
+      });
+      return next;
+    });
+  }, [items]);
+
+  function updateTransportPick(regNo, field, value) {
+    setTransportPicks({ ...transportPicks, [regNo]: { ...transportPicks[regNo], [field]: value } });
+  }
+
   async function advance(regNo, isConfirming) {
     setBusy(regNo);
     try {
       const body = { action: "advance" };
-      if (isConfirming && classPicks[regNo]) body.class_id = classPicks[regNo];
+      if (isConfirming) {
+        if (classPicks[regNo]) body.class_id = classPicks[regNo];
+        const t = transportPicks[regNo];
+        if (t?.route_id && t?.vehicle_id) {
+          body.route_id = t.route_id;
+          body.vehicle_id = t.vehicle_id;
+          body.pickup_point = t.pickup_point;
+        }
+      }
       const { data } = await api.post(`/admin-portal/admissions/${regNo}/action/`, body);
       if (data.credentials) setCredentials(data.credentials);
       setToast(`Application moved to ${data.status}.`);
@@ -94,6 +124,12 @@ export default function Admissions() {
           {credentials.class_assignment_error && (
             <p className="text-sm text-danger mt-1">Class not assigned: {credentials.class_assignment_error} Assign one from Classes & Subjects.</p>
           )}
+          {credentials.transport_assigned && (
+            <p className="text-sm mt-1">Transport assigned: <b>{credentials.transport_assigned}</b>.</p>
+          )}
+          {credentials.transport_assignment_error && (
+            <p className="text-sm text-danger mt-1">Transport not assigned: {credentials.transport_assignment_error} Assign it from Transport.</p>
+          )}
           <button onClick={() => setCredentials(null)} className="mt-2 text-xs text-ink-secondary hover:underline">Dismiss</button>
         </Card>
       )}
@@ -109,9 +145,12 @@ export default function Admissions() {
                 <p className="text-xs text-ink-secondary">
                   {a.target_class} · Parent: {a.parent_name} ({a.parent_phone}) · Applied {new Date(a.submitted_at).toLocaleDateString()}
                 </p>
+                {a.needs_transport && (
+                  <p className="text-xs text-ink-secondary">Wants transport — pickup: {a.preferred_pickup_point || "not specified"}</p>
+                )}
                 {a.rejection_reason && <p className="text-xs text-danger mt-1">Rejected: {a.rejection_reason}</p>}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge tone={TONE[a.status] || "slate"}>{a.status}</Badge>
                 {a.status === "Fee_Pending" && (
                   <select
@@ -122,6 +161,26 @@ export default function Admissions() {
                     <option value="">Assign class…</option>
                     {classes.map((c) => <option key={c.id} value={c.id}>{c.name}-{c.section}</option>)}
                   </select>
+                )}
+                {a.status === "Fee_Pending" && a.needs_transport && (
+                  <>
+                    <select
+                      value={transportPicks[a.registration_number]?.route_id || ""}
+                      onChange={(e) => updateTransportPick(a.registration_number, "route_id", e.target.value)}
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                    >
+                      <option value="">Assign route…</option>
+                      {routes.map((r) => <option key={r.id} value={r.id}>{r.route_name}</option>)}
+                    </select>
+                    <select
+                      value={transportPicks[a.registration_number]?.vehicle_id || ""}
+                      onChange={(e) => updateTransportPick(a.registration_number, "vehicle_id", e.target.value)}
+                      className="rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                    >
+                      <option value="">Assign vehicle…</option>
+                      {vehicles.map((v) => <option key={v.id} value={v.id}>{v.vehicle_number}</option>)}
+                    </select>
+                  </>
                 )}
                 {NEXT_LABEL[a.status] && (
                   <button

@@ -106,7 +106,7 @@ def current_academic_year():
     return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
-def _generate_credentials(enquiry, class_id=None):
+def _generate_credentials(enquiry, class_id=None, route_id=None, vehicle_id=None, pickup_point=None):
     """Creates a Parent account (if needed) + Student account for a Confirmed
     admission enquiry, and links both back onto portal_* tables. Idempotent:
     if the enquiry already has student_user_id/parent_user_id set, does
@@ -116,7 +116,13 @@ def _generate_credentials(enquiry, class_id=None):
     current academic year (portal_student_enrollment) -- this is the pivot
     the rest of daily operations (fees, timetable, LMS access) already
     derive live from, so assigning a class here is what actually activates
-    them, not a separate step per downstream feature."""
+    them, not a separate step per downstream feature.
+
+    If route_id and vehicle_id are given, also creates a
+    portal_transport_allocation row -- unlike class/fees/LMS, transport has
+    no live-derived fallback, so it only happens when the admin explicitly
+    picks a route/vehicle at confirmation time (normally because the
+    enquiry's needs_transport flag was set at intake)."""
     if enquiry.student_user_id:
         student = User.objects.filter(id=enquiry.student_user_id).first()
         parent = User.objects.filter(id=enquiry.parent_user_id).first() if enquiry.parent_user_id else None
@@ -200,6 +206,24 @@ def _generate_credentials(enquiry, class_id=None):
                 else:
                     class_assignment_error = "Portal schema has not been applied."
 
+            transport_assigned = None
+            transport_assignment_error = None
+            if route_id and vehicle_id:
+                if table_exists("portal_transport_allocation") and table_exists("portal_route") and table_exists("portal_vehicle"):
+                    route_row = row("SELECT route_name FROM portal_route WHERE id=%s", [route_id])
+                    vehicle_row = row("SELECT vehicle_number FROM portal_vehicle WHERE id=%s", [vehicle_id])
+                    if route_row and vehicle_row:
+                        cursor.execute(
+                            "INSERT INTO portal_transport_allocation (student_id, vehicle_id, route_id, pickup_point) "
+                            "VALUES (%s,%s,%s,%s) ON CONFLICT (student_id) DO NOTHING",
+                            [student.id, vehicle_id, route_id, pickup_point or enquiry.preferred_pickup_point],
+                        )
+                        transport_assigned = f"{route_row['route_name']} ({vehicle_row['vehicle_number']})"
+                    else:
+                        transport_assignment_error = "Route or vehicle not found."
+                else:
+                    transport_assignment_error = "Portal schema has not been applied."
+
         enquiry.student_user_id = student.id
         enquiry.parent_user_id = parent.id
         enquiry.save(update_fields=["student_user_id", "parent_user_id"])
@@ -212,6 +236,8 @@ def _generate_credentials(enquiry, class_id=None):
         "parent_account_reused": not parent_is_new,
         "class_assigned": class_name,
         "class_assignment_error": class_assignment_error,
+        "transport_assigned": transport_assigned,
+        "transport_assignment_error": transport_assignment_error,
     }
     return student, parent, credentials
 
@@ -279,19 +305,21 @@ class AdmissionListView(AdminMixin, APIView):
         data = list(qs.values(
             "registration_number", "applicant_name", "date_of_birth", "gender", "target_class",
             "parent_name", "parent_phone", "parent_email", "scholarship_applied", "status",
-            "rejection_reason", "submitted_at",
+            "rejection_reason", "submitted_at", "needs_transport", "preferred_pickup_point",
         ))
         return Response(serialise(data))
 
 
 class AdmissionActionView(AdminMixin, APIView):
-    """POST { action: 'advance' | 'reject' | 'confirm', reason?, class_id? } to
-    move an application through Verification -> Screening -> Fee_Pending ->
-    Confirmed, or reject it at any stage. Advancing to Confirmed generates
-    student+parent logins, and if class_id is given, also enrolls the
-    student into that class (which is what actually makes their fees,
-    timetable, and LMS access apply -- those are computed live from class
-    enrollment, not separate steps)."""
+    """POST { action: 'advance' | 'reject' | 'confirm', reason?, class_id?,
+    route_id?, vehicle_id?, pickup_point? } to move an application through
+    Verification -> Screening -> Fee_Pending -> Confirmed, or reject it at
+    any stage. Advancing to Confirmed generates student+parent logins;
+    class_id also enrolls the student into that class (which is what
+    actually makes their fees, timetable, and LMS access apply -- those are
+    computed live from class enrollment, not separate steps); route_id +
+    vehicle_id also creates a transport allocation (normally only relevant
+    when the enquiry's needs_transport flag was set at intake)."""
 
     def post(self, request, registration_number):
         try:
@@ -319,7 +347,12 @@ class AdmissionActionView(AdminMixin, APIView):
             payload = {"status": enquiry.status}
             if nxt == "Confirmed":
                 class_id = request.data.get("class_id")
-                student, parent, credentials = _generate_credentials(enquiry, class_id=class_id)
+                route_id = request.data.get("route_id")
+                vehicle_id = request.data.get("vehicle_id")
+                pickup_point = request.data.get("pickup_point")
+                student, parent, credentials = _generate_credentials(
+                    enquiry, class_id=class_id, route_id=route_id, vehicle_id=vehicle_id, pickup_point=pickup_point,
+                )
                 if credentials:
                     payload["credentials"] = credentials
                     log_action(request.user, "admission.credentials_generated", "admission", registration_number,

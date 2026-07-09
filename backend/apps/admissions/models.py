@@ -45,6 +45,13 @@ class AdmissionEnquiry(models.Model):
     scholarship_applied = models.BooleanField(default=False)
     id_proof_document = models.FileField(upload_to="admissions/documents/", blank=True, null=True)
 
+    needs_transport = models.BooleanField(default=False)
+    # Free text, same reasoning as target_class above: the public portal
+    # doesn't own portal_route, so it can't offer a real route picker at
+    # intake time -- the admin resolves this to an actual route/vehicle when
+    # confirming the admission.
+    preferred_pickup_point = models.CharField(max_length=200, blank=True)
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="Registered")
     reviewed_by = models.CharField(max_length=150, blank=True, help_text="Admin username/name — FK to core.User once auth app is wired in")
     rejection_reason = models.TextField(blank=True)

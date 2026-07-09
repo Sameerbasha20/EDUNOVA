@@ -11,6 +11,7 @@ class AdmissionEnquirySerializer(serializers.ModelSerializer):
             "id", "registration_number", "applicant_name", "date_of_birth",
             "gender", "target_class", "parent_name", "parent_phone",
             "parent_email", "address", "scholarship_applied",
-            "id_proof_document", "status", "submitted_at",
+            "id_proof_document", "needs_transport", "preferred_pickup_point",
+            "status", "submitted_at",
         ]
         read_only_fields = ["id", "registration_number", "status", "submitted_at"]
