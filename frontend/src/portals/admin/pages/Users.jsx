@@ -23,9 +23,11 @@ export default function Users() {
   useEffect(() => { load(); }, [roleFilter]);
 
   useEffect(() => {
-    if (form.role !== "Teacher") return;
+    if (form.role !== "Teacher" && form.role !== "Student") return;
     api.get("/admin-portal/classes/").then(({ data }) => setClasses(data)).catch(() => setClasses([]));
-    api.get("/admin-portal/subjects/").then(({ data }) => setSubjects(data)).catch(() => setSubjects([]));
+    if (form.role === "Teacher") {
+      api.get("/admin-portal/subjects/").then(({ data }) => setSubjects(data)).catch(() => setSubjects([]));
+    }
   }, [form.role]);
 
   async function createUser(e) {
@@ -56,6 +58,12 @@ export default function Users() {
         <Card className="border-2 border-academic-green">
           <p className="font-semibold text-academic-green mb-1">User created</p>
           <p className="text-sm">Username: <b>{created.username}</b> · Temp password: <b>{created.temp_password}</b> · Role: {created.role}</p>
+          {created.class_assigned && (
+            <p className="text-sm mt-1">Enrolled into <b>{created.class_assigned}</b> — fees, timetable, and LMS access now apply automatically.</p>
+          )}
+          {created.class_assignment_error && (
+            <p className="text-sm text-danger mt-1">Class not assigned: {created.class_assignment_error}</p>
+          )}
           <button onClick={() => setCreated(null)} className="mt-2 text-xs text-ink-secondary hover:underline">Dismiss</button>
         </Card>
       )}
@@ -81,6 +89,12 @@ export default function Users() {
                 {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </>
+          )}
+          {form.role === "Student" && (
+            <select value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <option value="">Assign class (optional)…</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}-{c.section}</option>)}
+            </select>
           )}
           <button className="bg-academic-blue text-white rounded-xl py-2 font-medium">Create</button>
         </form>

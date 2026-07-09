@@ -106,6 +106,33 @@ def current_academic_year():
     return f"{start_year}-{(start_year + 1) % 100:02d}"
 
 
+def _enroll_student_in_class(student, class_id):
+    """Idempotent: enrolls a student into a class for the current academic
+    year with an auto-assigned roll number. Returns (class_name, error) --
+    exactly one of the two will be non-None. No-op (None, None) if class_id
+    is falsy, so callers can pass an optional/blank value through directly."""
+    if not class_id:
+        return None, None
+    if not (table_exists("portal_student_enrollment") and table_exists("portal_class")):
+        return None, "Portal schema has not been applied."
+    class_row = row("SELECT id, name, section FROM portal_class WHERE id=%s", [class_id])
+    if not class_row:
+        return None, "Class not found."
+    academic_year = current_academic_year()
+    next_roll = row(
+        "SELECT COALESCE(MAX(roll_number), 0) + 1 AS n FROM portal_student_enrollment "
+        "WHERE class_id=%s AND academic_year=%s",
+        [class_id, academic_year],
+    )["n"]
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "INSERT INTO portal_student_enrollment (student_id, class_id, academic_year, roll_number) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT (student_id, class_id, academic_year) DO NOTHING",
+            [student.id, class_id, academic_year, next_roll],
+        )
+    return f"{class_row['name']}-{class_row['section']}", None
+
+
 def _generate_credentials(enquiry, class_id=None, route_id=None, vehicle_id=None, pickup_point=None):
     """Creates a Parent account (if needed) + Student account for a Confirmed
     admission enquiry, and links both back onto portal_* tables. Idempotent:
@@ -183,28 +210,7 @@ def _generate_credentials(enquiry, class_id=None, route_id=None, vehicle_id=None
                     [student.id, parent.id, admission_number, enquiry.date_of_birth, enquiry.gender],
                 )
 
-            class_name = None
-            class_assignment_error = None
-            if class_id:
-                if table_exists("portal_student_enrollment") and table_exists("portal_class"):
-                    class_row = row("SELECT id, name, section FROM portal_class WHERE id=%s", [class_id])
-                    if class_row:
-                        academic_year = current_academic_year()
-                        next_roll = row(
-                            "SELECT COALESCE(MAX(roll_number), 0) + 1 AS n FROM portal_student_enrollment "
-                            "WHERE class_id=%s AND academic_year=%s",
-                            [class_id, academic_year],
-                        )["n"]
-                        cursor.execute(
-                            "INSERT INTO portal_student_enrollment (student_id, class_id, academic_year, roll_number) "
-                            "VALUES (%s,%s,%s,%s) ON CONFLICT (student_id, class_id, academic_year) DO NOTHING",
-                            [student.id, class_id, academic_year, next_roll],
-                        )
-                        class_name = f"{class_row['name']}-{class_row['section']}"
-                    else:
-                        class_assignment_error = "Class not found."
-                else:
-                    class_assignment_error = "Portal schema has not been applied."
+            class_name, class_assignment_error = _enroll_student_in_class(student, class_id)
 
             transport_assigned = None
             transport_assignment_error = None
@@ -437,10 +443,14 @@ class UserListView(AdminMixin, APIView):
                     "ON CONFLICT (class_id, subject_id, teacher_id) DO NOTHING",
                     [class_id, subject_id, user.id],
                 )
+        class_name = class_assignment_error = None
+        if role == "Student":
+            class_name, class_assignment_error = _enroll_student_in_class(user, class_id)
         log_action(request.user, "user.create", "user", user.id, {"role": role, "id_number": id_number})
         return Response({
             "id": user.id, "username": user.username, "temp_password": temp_password,
             "role": role, "id_number": id_number,
+            "class_assigned": class_name, "class_assignment_error": class_assignment_error,
         })
 
 

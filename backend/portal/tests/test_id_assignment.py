@@ -163,3 +163,40 @@ class UserCreationAssignsIdTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data["id_number"].startswith("STU-"))
+        self.assertIsNone(data["class_assigned"])
+        self.assertIsNone(data["class_assignment_error"])
+
+    def test_create_student_with_class_id_enrolls_them(self):
+        resp = self.client.post(
+            "/api/admin-portal/users/",
+            data={
+                "role": "Student", "email": "with.class.idtest@edunova.edu", "first_name": "With", "last_name": "Class",
+                "class_id": self.class_id,
+            },
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["class_assigned"], "IdTest-X")
+        self.assertIsNone(data["class_assignment_error"])
+
+        row = connection.cursor()
+        row.execute("SELECT class_id FROM portal_student_enrollment WHERE student_id=%s", [data["id"]])
+        self.assertEqual(row.fetchone()[0], self.class_id)
+
+    def test_create_student_with_invalid_class_id_still_succeeds(self):
+        resp = self.client.post(
+            "/api/admin-portal/users/",
+            data={
+                "role": "Student", "email": "bad.class.student.idtest@edunova.edu", "first_name": "Bad", "last_name": "Class",
+                "class_id": 999999,
+            },
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["id_number"].startswith("STU-"))
+        self.assertIsNone(data["class_assigned"])
+        self.assertEqual(data["class_assignment_error"], "Class not found.")
