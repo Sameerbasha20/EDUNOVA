@@ -29,6 +29,25 @@ def teacher_classes(user_id):
     )
 
 
+def _teaches(teacher_id, class_id, subject_id=None):
+    """True only if this teacher is actually allocated to teach this class
+    (and, if given, this specific subject in it). Every endpoint that takes
+    a client-supplied class_id/subject_id must call this before reading or
+    writing that class's data -- otherwise any teacher could pass an
+    arbitrary class_id and touch a class they have nothing to do with."""
+    if not class_id or not table_exists("portal_academic_allocation"):
+        return False
+    sql = "SELECT 1 AS ok FROM portal_academic_allocation WHERE teacher_id=%s AND class_id=%s"
+    params = [teacher_id, class_id]
+    if subject_id:
+        sql += " AND subject_id=%s"
+        params.append(subject_id)
+    return bool(row(sql, params))
+
+
+_NOT_YOUR_CLASS = Response({"detail": "You are not allocated to teach this class."}, status=403)
+
+
 class TeacherProfileView(TeacherMixin, APIView):
     def get(self, request):
         u = request.user
@@ -126,6 +145,8 @@ class MyClassesView(TeacherMixin, APIView):
 
 class ClassRosterView(TeacherMixin, APIView):
     def get(self, request, class_id):
+        if not _teaches(request.user.id, class_id):
+            return _NOT_YOUR_CLASS
         if not table_exists("portal_student_enrollment"):
             return Response([])
         data = rows(
@@ -147,6 +168,8 @@ class AttendanceView(TeacherMixin, APIView):
         if not class_id:
             classes = teacher_classes(request.user.id)
             class_id = classes[0]["class_id"] if classes else None
+        elif not _teaches(request.user.id, class_id):
+            return _NOT_YOUR_CLASS
         if not class_id:
             return Response({"records": []})
         roster = rows(
@@ -166,6 +189,8 @@ class AttendanceView(TeacherMixin, APIView):
 
     def post(self, request):
         class_id = request.data.get("class_id")
+        if not _teaches(request.user.id, class_id):
+            return _NOT_YOUR_CLASS
         date_value = request.data.get("date") or date.today().isoformat()
         records = request.data.get("records", [])
         if not table_exists("portal_attendance"):
@@ -201,11 +226,13 @@ class HomeworkView(TeacherMixin, APIView):
         return Response(serialise(data))
 
     def post(self, request):
-        if not table_exists("portal_homework"):
-            return Response({"detail": "Portal schema has not been applied."}, status=400)
         data = request.data
         class_id = data.get("class_id")
         subject_id = data.get("subject_id")
+        if not _teaches(request.user.id, class_id, subject_id):
+            return _NOT_YOUR_CLASS
+        if not table_exists("portal_homework"):
+            return Response({"detail": "Portal schema has not been applied."}, status=400)
         with connection.cursor() as cursor:
             cursor.execute(
                 """INSERT INTO portal_homework (class_id, subject_id, teacher_id, title, description, assigned_date, due_date)
@@ -235,11 +262,13 @@ class AssignmentView(TeacherMixin, APIView):
         return Response(serialise(data))
 
     def post(self, request):
-        if not table_exists("portal_assignment"):
-            return Response({"detail": "Portal schema has not been applied."}, status=400)
         data = request.data
         class_id = data.get("class_id")
         subject_id = data.get("subject_id")
+        if not _teaches(request.user.id, class_id, subject_id):
+            return _NOT_YOUR_CLASS
+        if not table_exists("portal_assignment"):
+            return Response({"detail": "Portal schema has not been applied."}, status=400)
         with connection.cursor() as cursor:
             cursor.execute(
                 """INSERT INTO portal_assignment (class_id, subject_id, teacher_id, title, description, file_url, max_marks, due_date)
@@ -250,10 +279,16 @@ class AssignmentView(TeacherMixin, APIView):
         return Response({"id": aid, "detail": "Assignment created."})
 
 
+_NOT_YOUR_ASSIGNMENT = Response({"detail": "This assignment doesn't belong to you."}, status=403)
+
+
 class AssignmentSubmissionsView(TeacherMixin, APIView):
     def get(self, request, assignment_id, submission_id=None):
         if not table_exists("portal_assignment_submission"):
             return Response([])
+        owns = row("SELECT 1 AS ok FROM portal_assignment WHERE id=%s AND teacher_id=%s", [assignment_id, request.user.id])
+        if not owns:
+            return _NOT_YOUR_ASSIGNMENT
         return Response(serialise(rows(
             """
             SELECT sub.id, sub.submission_url, sub.submitted_at, sub.marks_obtained, sub.teacher_feedback,
@@ -269,6 +304,9 @@ class AssignmentSubmissionsView(TeacherMixin, APIView):
     def patch(self, request, assignment_id, submission_id):
         if not table_exists("portal_assignment_submission"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
+        owns = row("SELECT 1 AS ok FROM portal_assignment WHERE id=%s AND teacher_id=%s", [assignment_id, request.user.id])
+        if not owns:
+            return _NOT_YOUR_ASSIGNMENT
         with connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE portal_assignment_submission SET marks_obtained=%s, teacher_feedback=%s WHERE id=%s AND assignment_id=%s",
@@ -333,6 +371,8 @@ class TeacherExamView(TeacherMixin, APIView):
             )
         class_id = data.get("class_id")
         subject_id = data.get("subject_id")
+        if not _teaches(request.user.id, class_id, subject_id):
+            return _NOT_YOUR_CLASS
         with connection.cursor() as cursor:
             cursor.execute(
                 """INSERT INTO portal_exam_schedule (class_id, subject_id, teacher_id, exam_name, exam_type, exam_date, start_time, duration_minutes, max_marks)
@@ -348,7 +388,7 @@ class MarksEntryView(TeacherMixin, APIView):
         exam_id = request.query_params.get("exam_schedule_id")
         if not exam_id or not table_exists("portal_exam_schedule"):
             return Response({"exam": None, "rows": []})
-        exam = row("SELECT e.id, e.exam_name, e.max_marks, c.name || '-' || c.section AS class_name, s.name AS subject_name FROM portal_exam_schedule e JOIN portal_class c ON c.id=e.class_id JOIN portal_subject s ON s.id=e.subject_id WHERE e.id=%s", [exam_id])
+        exam = row("SELECT e.id, e.exam_name, e.max_marks, c.name || '-' || c.section AS class_name, s.name AS subject_name FROM portal_exam_schedule e JOIN portal_class c ON c.id=e.class_id JOIN portal_subject s ON s.id=e.subject_id WHERE e.id=%s AND e.teacher_id=%s", [exam_id, request.user.id])
         if not exam:
             return Response({"exam": None, "rows": []})
         data = rows(
@@ -373,8 +413,10 @@ class MarksEntryView(TeacherMixin, APIView):
         # Accept both 'entries' (frontend key) and 'rows' (legacy)
         marks_rows = request.data.get("entries") or request.data.get("rows", [])
         submit = request.data.get("submit", True)
-        exam = row("SELECT max_marks FROM portal_exam_schedule WHERE id=%s", [exam_id])
-        max_marks = exam["max_marks"] if exam else 100
+        exam = row("SELECT max_marks FROM portal_exam_schedule WHERE id=%s AND teacher_id=%s", [exam_id, request.user.id])
+        if not exam:
+            return Response({"detail": "No exam schedule found with that id for you."}, status=404)
+        max_marks = exam["max_marks"]
         with connection.cursor() as cursor:
             for r in marks_rows:
                 raw = r.get("marks_obtained")
@@ -401,6 +443,8 @@ class PerformanceAnalyticsView(TeacherMixin, APIView):
         subject_id = request.query_params.get("subject_id")
         if not class_id:
             return Response({"class_average": 0, "students": []})
+        if not _teaches(request.user.id, class_id, subject_id):
+            return _NOT_YOUR_CLASS
         data = rows(
             """
             SELECT u.id AS student_id, COALESCE(u.first_name || ' ' || u.last_name, u.username) AS name,
