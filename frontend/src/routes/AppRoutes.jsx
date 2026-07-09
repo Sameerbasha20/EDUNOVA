@@ -27,7 +27,7 @@ import ContactPage from '../portals/public/pages/ContactPage'
 import FAQPage from '../portals/public/pages/FAQPage'
 import PrivacyPolicy from '../portals/public/pages/PrivacyPolicy'
 import Terms from '../portals/public/pages/Terms'
-import LoginRolePicker from '../portals/public/pages/LoginRolePicker'
+import Login from '../portals/public/pages/Login'
 import CMSPageView from '../portals/public/pages/CMSPageView'
 import NotFound from '../portals/public/pages/NotFound'
 
@@ -66,7 +66,7 @@ export default function AppRoutes() {
         <Route path="/faq" element={<FAQPage />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<Terms />} />
-        <Route path="/login" element={<LoginRolePicker />} />
+        <Route path="/login" element={<Login />} />
         <Route path="/page/:slug" element={<CMSPageView />} />
       </Route>
 

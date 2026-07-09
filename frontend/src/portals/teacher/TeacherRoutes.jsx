@@ -12,7 +12,6 @@ import Documents from "./pages/Documents";
 import Exams from "./pages/Exams";
 import Homework from "./pages/Homework";
 import Leave from "./pages/Leave";
-import Login from "./pages/Login";
 import MarksEntry from "./pages/MarksEntry";
 import Messages from "./pages/Messages";
 import Notices from "./pages/Notices";
@@ -24,7 +23,6 @@ export default function TeacherRoutes() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="login" element={<Login />} />
         <Route
           element={
             <ProtectedRoute>

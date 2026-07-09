@@ -16,7 +16,6 @@ import Hostel from "./pages/Hostel";
 import MedicalRecords from "./pages/MedicalRecords";
 import Library from "./pages/Library";
 import Lms from "./pages/Lms";
-import Login from "./pages/Login";
 import Profile from "./pages/Profile";
 import Results from "./pages/Results";
 import Support from "./pages/Support";
@@ -27,7 +26,6 @@ export default function StudentRoutes() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="login" element={<Login />} />
         <Route
           element={
             <ProtectedRoute>

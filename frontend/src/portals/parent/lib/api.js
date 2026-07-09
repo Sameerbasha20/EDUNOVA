@@ -22,7 +22,7 @@ api.interceptors.response.use(
       const refresh = localStorage.getItem("edunova_parent_refresh");
       if (!refresh) {
         localStorage.clear();
-        window.location.href = "/parent/login";
+        window.location.href = "/login";
         return Promise.reject(error);
       }
       if (isRefreshing) {
@@ -43,7 +43,7 @@ api.interceptors.response.use(
         return api(original);
       } catch (e) {
         localStorage.clear();
-        window.location.href = "/parent/login";
+        window.location.href = "/login";
         return Promise.reject(e);
       } finally {
         isRefreshing = false;

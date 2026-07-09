@@ -1,13 +1,55 @@
-import { PenSquare, ShieldCheck } from "lucide-react";
+import { GraduationCap, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import * as otpAuth from "../../../lib/useOtpAuth";
+
+// One login page for every role — the backend resolves which portal a user
+// belongs to (portal_user_profile / groups / superuser), the client just
+// stores the tokens under that portal's existing localStorage keys and
+// lands on that portal's dashboard. No role picker, no per-portal login form.
+const PORTALS = {
+  Student: {
+    path: "/student",
+    keys: { access: "edunova_student_access", refresh: "edunova_student_refresh", user: "edunova_student_user" },
+  },
+  Teacher: {
+    path: "/teacher",
+    keys: { access: "edunova_teacher_access", refresh: "edunova_teacher_refresh", user: "edunova_teacher_user" },
+  },
+  Parent: {
+    path: "/parent",
+    keys: { access: "edunova_parent_access", refresh: "edunova_parent_refresh", user: "edunova_parent_user" },
+  },
+  Admin: {
+    path: "/admin",
+    keys: { access: "edunova_admin_access", refresh: "edunova_admin_refresh", user: "edunova_admin_user" },
+  },
+};
+
+function isTokenValid(token) {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+// If a session from a previous login is still valid, skip straight to that
+// portal instead of showing the form again.
+function existingSessionPath() {
+  for (const portal of Object.values(PORTALS)) {
+    const access = localStorage.getItem(portal.keys.access);
+    const refresh = localStorage.getItem(portal.keys.refresh);
+    if (isTokenValid(access) || isTokenValid(refresh)) return portal.path;
+  }
+  return null;
+}
 
 export default function Login() {
-  const { user, requestOtp, verifyOtp, resendOtp } = useAuth();
   const navigate = useNavigate();
-
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // 1 = credentials, 2 = otp
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -15,14 +57,15 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/teacher" replace />;
+  const redirectTo = existingSessionPath();
+  if (redirectTo) return <Navigate to={redirectTo} replace />;
 
   async function handleCredentials(e) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const data = await requestOtp(email, password);
+      const data = await otpAuth.requestOtp(email, password);
       setUserId(data.user_id);
       setStep(2);
     } catch (err) {
@@ -37,8 +80,16 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await verifyOtp(userId, otp);
-      navigate("/teacher");
+      const data = await otpAuth.verifyOtp(userId, otp);
+      const portal = PORTALS[data.user?.user_type];
+      if (!portal) {
+        setError("This account isn't linked to any portal yet. Please contact the school office.");
+        return;
+      }
+      localStorage.setItem(portal.keys.access, data.access);
+      localStorage.setItem(portal.keys.refresh, data.refresh);
+      localStorage.setItem(portal.keys.user, JSON.stringify(data.user));
+      navigate(portal.path, { replace: true });
     } catch (err) {
       setError(err?.response?.data?.detail || "Incorrect OTP.");
     } finally {
@@ -48,7 +99,7 @@ export default function Login() {
 
   async function handleResend() {
     setError("");
-    await resendOtp(userId);
+    await otpAuth.resendOtp(userId);
   }
 
   return (
@@ -61,13 +112,13 @@ export default function Login() {
           <span className="font-heading font-semibold text-lg">EduNova Global Academy</span>
         </div>
         <div>
-          <PenSquare size={48} className="text-academic-gold mb-6" />
+          <GraduationCap size={48} className="text-academic-gold mb-6" />
           <h1 className="font-heading text-4xl font-bold leading-tight mb-3">
-            Empowering Every
-            <br /> Educator.
+            Inspiring Minds.
+            <br /> Building Futures.
           </h1>
           <p className="text-white/70 font-sub max-w-sm">
-            Attendance, homework, grading, and analytics for every class you teach — in one place.
+            One login for students, teachers, parents & administrators — your dashboard opens automatically for your role.
           </p>
         </div>
         <p className="text-xs text-white/40">© {new Date().getFullYear()} EduNova Global Academy Pvt. Ltd.</p>
@@ -76,7 +127,7 @@ export default function Login() {
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <h2 className="font-heading text-2xl font-bold mb-1">
-            {step === 1 ? "Teacher login" : "Verify your identity"}
+            {step === 1 ? "Portal login" : "Verify your identity"}
           </h2>
           <p className="text-ink-secondary text-sm mb-6 font-sub">
             {step === 1

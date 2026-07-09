@@ -43,15 +43,6 @@ const NAV_ITEMS = [
       { to: '/careers', label: 'Careers' },
     ],
   },
-  {
-    label: 'Login',
-    items: [
-      { to: '/student/login', label: 'Student Login' },
-      { to: '/teacher/login', label: 'Teacher Login' },
-      { to: '/parent/login', label: 'Parent Login' },
-      { to: '/admin/login', label: 'Admin Login' },
-    ],
-  },
   { to: '/contact', label: 'Contact' },
 ]
 

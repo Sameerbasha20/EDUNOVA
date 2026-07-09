@@ -4,7 +4,6 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PortalNotFound from "../../components/PortalNotFound";
 
-import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Attendance from "./pages/Attendance";
 import Homework from "./pages/Homework";
@@ -24,7 +23,6 @@ export default function ParentRoutes() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="login" element={<Login />} />
         <Route
           element={
             <ProtectedRoute>

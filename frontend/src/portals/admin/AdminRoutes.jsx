@@ -4,7 +4,6 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PortalNotFound from "../../components/PortalNotFound";
 
-import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Admissions from "./pages/Admissions";
 import Users from "./pages/Users";
@@ -28,7 +27,6 @@ export default function AdminRoutes() {
   return (
     <AuthProvider>
       <Routes>
-        <Route path="login" element={<Login />} />
         <Route
           element={
             <ProtectedRoute>
