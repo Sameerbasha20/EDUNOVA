@@ -20,7 +20,7 @@ export default function Library() {
       await api.post("/admin-portal/library/books/", bookForm);
       setBookForm({ title: "", author: "", isbn: "", barcode_id: "", quantity: 1, available_quantity: 1, book_type: "Physical", digital_file_url: "" });
       load();
-    } catch { setToast("Could not add book."); }
+    } catch (err) { setToast(err?.response?.data?.detail || "Could not add book."); }
   }
 
   async function issue(e) {

@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db import connection, transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils.crypto import get_random_string
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -529,9 +529,15 @@ class SimpleTableView(AdminMixin, APIView):
         values = [request.data.get(c) for c in self.columns]
         placeholders = ",".join(["%s"] * len(self.columns))
         col_sql = ",".join(self.columns)
-        with connection.cursor() as cursor:
-            cursor.execute(f"INSERT INTO {self.table} ({col_sql}) VALUES ({placeholders}) RETURNING id", values)
-            new_id = cursor.fetchone()[0]
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(f"INSERT INTO {self.table} ({col_sql}) VALUES ({placeholders}) RETURNING id", values)
+                new_id = cursor.fetchone()[0]
+        except IntegrityError:
+            # A duplicate unique value (ISBN, barcode, subject code, vehicle
+            # number, ...) previously bubbled up as an unhandled 500 with a
+            # raw Django debug traceback instead of a normal validation error.
+            return Response({"detail": "A record with one of these unique values already exists."}, status=400)
         log_action(request.user, f"{self.table}.create", self.table, new_id, dict(zip(self.columns, [str(v) for v in values])))
         return Response({"id": new_id, "detail": "Created."})
 
@@ -619,7 +625,9 @@ class LibraryIssueView(AdminMixin, APIView):
         borrower_id = request.data.get("borrower_id")
         days = int(request.data.get("loan_days", 14))
         book = row("SELECT available_quantity FROM portal_book WHERE id=%s", [book_id])
-        if not book or book["available_quantity"] < 1:
+        if not book:
+            return Response({"detail": "Book not found."}, status=404)
+        if book["available_quantity"] < 1:
             return Response({"detail": "No copies available."}, status=400)
         due = date.today() + timedelta(days=days)
         with connection.cursor() as cursor:
