@@ -13,19 +13,25 @@ export default function MarksEntry() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get("/teacher/exams/").then(({ data }) => {
-      setExams(data);
-      if (data.length) setExamId(String(data[0].id));
-    });
+    api
+      .get("/teacher/exams/")
+      .then(({ data }) => {
+        setExams(data);
+        if (data.length) setExamId(String(data[0].id));
+      })
+      .catch(() => setExams([]));
   }, []);
 
   useEffect(() => {
     if (!examId) return;
     setSheet(null);
-    api.get("/teacher/marks-entry/", { params: { exam_schedule_id: examId } }).then(({ data }) => {
-      setSheet(data);
-      setRows(data.rows);
-    });
+    api
+      .get("/teacher/marks-entry/", { params: { exam_schedule_id: examId } })
+      .then(({ data }) => {
+        setSheet(data);
+        setRows(data.rows || []);
+      })
+      .catch(() => setSheet({ exam: null, rows: [] }));
   }, [examId]);
 
   function updateRow(idx, field, value) {
@@ -78,6 +84,8 @@ export default function MarksEntry() {
 
       {!sheet ? (
         <Loader rows={4} />
+      ) : !sheet.exam ? (
+        <Card><EmptyState label="Could not load this exam's marks sheet." /></Card>
       ) : (
         <Card>
           <SectionTitle

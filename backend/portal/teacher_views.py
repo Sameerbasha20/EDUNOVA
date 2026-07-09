@@ -45,7 +45,21 @@ def _teaches(teacher_id, class_id, subject_id=None):
     return bool(row(sql, params))
 
 
+def _teaches_subject(teacher_id, subject_id):
+    """True only if this teacher is allocated to teach this subject in at
+    least one class -- for subject-scoped (not class-scoped) resources like
+    the question bank, where there's no single class_id to check _teaches()
+    against."""
+    if not subject_id or not table_exists("portal_academic_allocation"):
+        return False
+    return bool(row(
+        "SELECT 1 AS ok FROM portal_academic_allocation WHERE teacher_id=%s AND subject_id=%s",
+        [teacher_id, subject_id],
+    ))
+
+
 _NOT_YOUR_CLASS = Response({"detail": "You are not allocated to teach this class."}, status=403)
+_NOT_YOUR_SUBJECT = Response({"detail": "You are not allocated to teach this subject."}, status=403)
 
 
 def teacher_profile_payload(user):
@@ -336,10 +350,13 @@ class QuestionBankView(TeacherMixin, APIView):
     def post(self, request, question_id=None):
         if not table_exists("portal_question_bank"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
+        subject_id = request.data.get("subject_id")
+        if not _teaches_subject(request.user.id, subject_id):
+            return _NOT_YOUR_SUBJECT
         with connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO portal_question_bank (subject_id, teacher_id, difficulty_level, question_text, answer_schema) VALUES (%s,%s,%s,%s,%s::jsonb) RETURNING id",
-                [request.data.get("subject_id"), request.user.id, request.data.get("difficulty_level", "Medium"), request.data.get("question_text"), request.data.get("answer_schema", "{}")],
+                [subject_id, request.user.id, request.data.get("difficulty_level", "Medium"), request.data.get("question_text"), request.data.get("answer_schema", "{}")],
             )
             qid = cursor.fetchone()[0]
         return Response({"id": qid, "detail": "Question added."})
@@ -501,8 +518,17 @@ class MessageThreadView(TeacherMixin, APIView):
     def post(self, request):
         if not table_exists("portal_message"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
+        receiver = request.data.get("receiver")
+        # Unlike the parent portal, MyContactsView deliberately exposes every
+        # user in the school as a valid contact (teachers legitimately need
+        # to reach staff/students outside their own classes), so this isn't
+        # scoped further -- it just needs to be a real user, otherwise the
+        # INSERT's NOT NULL/FK constraint on receiver_id raised an unhandled
+        # IntegrityError -> 500 instead of a normal validation error.
+        if not receiver or not row("SELECT 1 AS ok FROM auth_user WHERE id=%s", [receiver]):
+            return Response({"detail": "Recipient not found."}, status=400)
         with connection.cursor() as cursor:
-            cursor.execute("INSERT INTO portal_message (sender_id, receiver_id, message_text) VALUES (%s,%s,%s) RETURNING id", [request.user.id, request.data.get("receiver"), request.data.get("message_text")])
+            cursor.execute("INSERT INTO portal_message (sender_id, receiver_id, message_text) VALUES (%s,%s,%s) RETURNING id", [request.user.id, receiver, request.data.get("message_text")])
             mid = cursor.fetchone()[0]
         return Response({"id": mid, "detail": "Message sent."})
 
@@ -564,6 +590,14 @@ class TeacherDocumentsView(TeacherMixin, APIView):
         data = request.data
         class_id = data.get("class_id")
         subject_id = data.get("subject_id")
+        # class_id/subject_id are optional (a document need not be tied to a
+        # specific class), but if either is given it must be one this
+        # teacher actually teaches -- otherwise a teacher could attach a
+        # "document" to any class/subject in the school.
+        if class_id and not _teaches(request.user.id, class_id, subject_id):
+            return _NOT_YOUR_CLASS
+        if subject_id and not class_id and not _teaches_subject(request.user.id, subject_id):
+            return _NOT_YOUR_SUBJECT
         with connection.cursor() as cursor:
             cursor.execute("INSERT INTO portal_teacher_document (teacher_id, class_id, subject_id, content_type, title, resource_url) VALUES (%s,%s,%s,%s,%s,%s) RETURNING id", [request.user.id, class_id, subject_id, data.get("content_type"), data.get("title"), data.get("resource_url")])
             did = cursor.fetchone()[0]

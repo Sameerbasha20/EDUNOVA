@@ -156,3 +156,57 @@ class TeacherClassOwnershipTests(TestCase):
             **_auth_header(self.intruder),
         )
         self.assertEqual(resp.status_code, 403)
+
+    def test_intruder_cannot_add_question_to_others_subject(self):
+        resp = self.client.post(
+            "/api/teacher/question-bank/",
+            data={"subject_id": self.subject_id, "question_text": "hack?", "answer_schema": "{}"},
+            content_type="application/json",
+            **_auth_header(self.intruder),
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_owner_can_add_question_to_own_subject(self):
+        resp = self.client.post(
+            "/api/teacher/question-bank/",
+            data={"subject_id": self.subject_id, "question_text": "real?", "answer_schema": "{}"},
+            content_type="application/json",
+            **_auth_header(self.owner),
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_intruder_cannot_publish_document_to_others_class(self):
+        resp = self.client.post(
+            "/api/teacher/documents/",
+            data={"class_id": self.class_id, "subject_id": self.subject_id, "content_type": "PDF_Notes", "title": "x", "resource_url": "http://x"},
+            content_type="application/json",
+            **_auth_header(self.intruder),
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_owner_can_publish_document_to_own_class(self):
+        resp = self.client.post(
+            "/api/teacher/documents/",
+            data={"class_id": self.class_id, "subject_id": self.subject_id, "content_type": "PDF_Notes", "title": "x", "resource_url": "http://x"},
+            content_type="application/json",
+            **_auth_header(self.owner),
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_message_to_nonexistent_user_returns_400_not_500(self):
+        resp = self.client.post(
+            "/api/teacher/messages/",
+            data={"receiver": 999999, "message_text": "hi"},
+            content_type="application/json",
+            **_auth_header(self.owner),
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_message_to_real_user_succeeds(self):
+        resp = self.client.post(
+            "/api/teacher/messages/",
+            data={"receiver": self.intruder.id, "message_text": "hi"},
+            content_type="application/json",
+            **_auth_header(self.owner),
+        )
+        self.assertEqual(resp.status_code, 200)
