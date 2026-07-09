@@ -78,8 +78,17 @@ pip install -r requirements.txt
 cp .env.example .env   # already done in this package; edit DATABASE_URL etc. for your own DB
 ```
 
-Edit `.env` and point `DATABASE_URL` at your own Postgres/Supabase instance,
-then apply the schema:
+Edit `.env` and point `DATABASE_URL` at your own Postgres/Supabase instance
+— **use the Session Pooler connection string, not the direct `db.[ref].
+supabase.co` host.** The direct host is IPv6-only; on a network without
+working IPv6 egress (common on some ISPs and most CI runners) it just hangs
+with no useful error. The pooler is IPv4-reachable, same database, same
+password (Dashboard > Project Settings > Database > Connection string >
+Session pooler). One caveat: `manage.py test` needs to CREATE/DROP a whole
+ephemeral test database, which doesn't work through the pooler (DROP
+DATABASE needs an exclusive connection pgbouncer won't give) — run tests
+with `--keepdb`, or point `DATABASE_URL` at the direct host just for that
+command. Then apply the schema:
 
 ```bash
 # 1. Apply all three portal extension SQL files against your Supabase/Postgres
