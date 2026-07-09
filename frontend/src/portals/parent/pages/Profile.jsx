@@ -5,11 +5,13 @@ import { Card, Loader, SectionTitle } from "../components/Common";
 
 export default function Profile() {
   const [profile, setProfile] = useState(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    api.get("/parent/profile/").then(({ data }) => setProfile(data)).catch(() => setProfile(null));
+    api.get("/parent/profile/").then(({ data }) => setProfile(data)).catch(() => setError(true));
   }, []);
 
+  if (error) return <p className="text-sm text-ink-secondary">Could not load your profile. Please try again shortly.</p>;
   if (!profile) return <Loader rows={3} />;
 
   return (

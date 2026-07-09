@@ -39,6 +39,27 @@ def _assert_own_child(parent_id, child_id):
     return bool(hit)
 
 
+def _is_valid_teacher_contact(parent_id, teacher_id):
+    """True only if teacher_id actually teaches a class one of this parent's
+    children is enrolled in -- the same set TeacherContactsView computes.
+    Every endpoint that lets a parent target a teacher (PTM booking,
+    messaging) must call this, or a parent could book/message an arbitrary
+    user in the system just by supplying any id."""
+    if not teacher_id or not table_exists("portal_academic_allocation"):
+        return False
+    return bool(row(
+        """
+        SELECT 1 AS ok
+        FROM portal_student_profile sp
+        JOIN portal_student_enrollment se ON se.student_id = sp.user_id
+        JOIN portal_academic_allocation aa ON aa.class_id = se.class_id
+        WHERE sp.parent_id = %s AND aa.teacher_id = %s
+        LIMIT 1
+        """,
+        [parent_id, teacher_id],
+    ))
+
+
 class ParentProfileView(ParentMixin, APIView):
     def get(self, request):
         u = request.user
@@ -224,9 +245,16 @@ class ChildFeesPayView(ParentMixin, APIView):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         fee_id = request.data.get("fee_structure_id")
         method = request.data.get("payment_method") or "Online"
-        fee = row("SELECT total_amount FROM portal_fee_structure WHERE id=%s", [fee_id])
-        if not fee:
+        cls = current_class_for_student(child_id)
+        fee = row("SELECT total_amount, class_id FROM portal_fee_structure WHERE id=%s", [fee_id])
+        if not fee or not cls or fee["class_id"] != cls["class_id"]:
             return Response({"detail": "Invalid fee."}, status=400)
+        already_paid = row(
+            "SELECT 1 AS ok FROM portal_payment WHERE student_id=%s AND fee_structure_id=%s AND status='Success'",
+            [child_id, fee_id],
+        )
+        if already_paid:
+            return Response({"detail": "This fee has already been paid."}, status=400)
         tx = f"EDN-{uuid4().hex[:10].upper()}"
         with connection.cursor() as cursor:
             cursor.execute(
@@ -343,10 +371,13 @@ class MessageThreadView(ParentMixin, APIView):
     def post(self, request):
         if not table_exists("portal_message"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
+        receiver = request.data.get("receiver")
+        if not _is_valid_teacher_contact(request.user.id, receiver):
+            return Response({"detail": "You can only message a teacher of one of your children."}, status=403)
         with connection.cursor() as cursor:
             cursor.execute(
                 "INSERT INTO portal_message (sender_id, receiver_id, message_text) VALUES (%s,%s,%s) RETURNING id",
-                [request.user.id, request.data.get("receiver"), request.data.get("message_text")],
+                [request.user.id, receiver, request.data.get("message_text")],
             )
             mid = cursor.fetchone()[0]
         return Response({"id": mid, "detail": "Message sent."})
@@ -423,16 +454,26 @@ class PtmBookingView(ParentMixin, APIView):
         if not table_exists("portal_ptm_booking"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         data = request.data
+        teacher_id = data.get("teacher_id")
+        student_id = data.get("student_id")
+        if not _is_valid_teacher_contact(request.user.id, teacher_id):
+            return Response({"detail": "This teacher does not teach any of your children."}, status=403)
+        # student_id is optional (a general meeting request need not name a
+        # specific child) but if one is given it must actually be this
+        # parent's own child.
+        if student_id and not _assert_own_child(request.user.id, student_id):
+            return Response({"detail": "Not your child, or child not found."}, status=403)
         with connection.cursor() as cursor:
             cursor.execute(
                 """
                 INSERT INTO portal_ptm_booking (parent_id, teacher_id, student_id, meeting_date, time_slot, parent_notes)
                 VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
                 """,
-                [request.user.id, data.get("teacher_id"), data.get("student_id"),
+                [request.user.id, teacher_id, student_id,
                  data.get("meeting_date"), data.get("time_slot"), data.get("parent_notes", "")],
             )
             bid = cursor.fetchone()[0]
+        log_action(request.user, "ptm.book", "ptm_booking", bid, {"teacher_id": teacher_id, "student_id": student_id})
         return Response({"id": bid, "detail": "Meeting requested."})
 
 
