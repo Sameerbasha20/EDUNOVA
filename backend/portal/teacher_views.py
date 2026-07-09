@@ -61,9 +61,10 @@ class TeacherProfileView(TeacherMixin, APIView):
             "qualification": "",
             "specialization": "",
             "date_of_joining": None,
+            "avatar_url": None,
         }
         if table_exists("portal_user_profile"):
-            p = row("SELECT phone_number FROM portal_user_profile WHERE user_id=%s", [u.id])
+            p = row("SELECT phone_number, avatar_url FROM portal_user_profile WHERE user_id=%s", [u.id])
             if p: profile.update(p)
         if table_exists("portal_teacher_profile"):
             t = row("SELECT employee_code, qualification, specialization, date_of_joining FROM portal_teacher_profile WHERE user_id=%s", [u.id])

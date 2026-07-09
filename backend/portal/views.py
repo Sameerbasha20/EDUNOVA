@@ -96,11 +96,13 @@ def student_profile_payload(user):
         "blood_group": "",
         "status": "Active",
         "qr_id_code": None,
+        "avatar_url": None,
     }
     if table_exists("portal_user_profile"):
-        p = row("SELECT phone_number FROM portal_user_profile WHERE user_id=%s", [user.id])
+        p = row("SELECT phone_number, avatar_url FROM portal_user_profile WHERE user_id=%s", [user.id])
         if p:
             base["phone_number"] = p.get("phone_number") or ""
+            base["avatar_url"] = p.get("avatar_url")
     if table_exists("portal_student_profile"):
         sp = row("SELECT admission_number, qr_id_code, date_of_birth, gender, blood_group, status FROM portal_student_profile WHERE user_id=%s", [user.id])
         if sp:
@@ -595,3 +597,29 @@ class StudentMessageThreadView(StudentOnlyMixin, APIView):
             )
             mid = cursor.fetchone()[0]
         return Response({"id": mid, "detail": "Message sent."})
+
+
+class AvatarView(APIView):
+    """Profile picture upload/delete -- shared across every portal since
+    avatar_url lives on portal_user_profile regardless of role. Any
+    authenticated user manages only their own (request.user), never
+    someone else's -- there's no user_id parameter to tamper with."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .services.storage_service import AvatarUploadError, upload_avatar
+
+        uploaded_file = request.FILES.get("avatar")
+        if not uploaded_file:
+            return Response({"detail": "No file uploaded (expected field name 'avatar')."}, status=400)
+        try:
+            url = upload_avatar(request.user, uploaded_file)
+        except AvatarUploadError as e:
+            return Response({"detail": str(e)}, status=400)
+        return Response({"avatar_url": url, "detail": "Profile picture updated."})
+
+    def delete(self, request):
+        from .services.storage_service import delete_avatar
+
+        delete_avatar(request.user)
+        return Response({"detail": "Profile picture removed."})

@@ -10,6 +10,9 @@ urlpatterns = [
     path("auth/resend-otp/", auth_views.resend_otp, name="resend-otp"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
 
+    # Profile picture -- shared across every portal (any authenticated role)
+    path("profile/avatar/", views.AvatarView.as_view()),
+
     # Student portal
     path("student/profile/", views.ProfileView.as_view()),
     path("student/dashboard/", views.DashboardView.as_view()),

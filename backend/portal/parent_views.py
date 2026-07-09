@@ -53,14 +53,16 @@ class ParentProfileView(ParentMixin, APIView):
             "emergency_contact": "",
             "address": "",
             "is_verified": False,
+            "parent_code": "—",
+            "avatar_url": None,
         }
         if table_exists("portal_user_profile"):
-            p = row("SELECT phone_number FROM portal_user_profile WHERE user_id=%s", [u.id])
+            p = row("SELECT phone_number, avatar_url FROM portal_user_profile WHERE user_id=%s", [u.id])
             if p:
                 profile.update(p)
         if table_exists("portal_parent_profile"):
             pp = row(
-                "SELECT father_name, mother_name, emergency_contact, address, is_verified "
+                "SELECT father_name, mother_name, emergency_contact, address, is_verified, parent_code "
                 "FROM portal_parent_profile WHERE user_id=%s",
                 [u.id],
             )

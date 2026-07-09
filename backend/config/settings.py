@@ -201,9 +201,9 @@ CORS_ALLOW_CREDENTIALS = True
 SUPABASE_URL = config("SUPABASE_URL", default="")
 SUPABASE_SERVICE_ROLE_KEY = config("SUPABASE_SERVICE_ROLE_KEY", default="")
 SUPABASE_BUCKET_LMS = "lms-resources"
-SUPABASE_BUCKET_SUBMISSIONS = "assignmentsubmissions"
-SUPABASE_BUCKET_CERTS = "officialdocuments"
-SUPABASE_BUCKET_AVATARS = "studentavatars"
+SUPABASE_BUCKET_SUBMISSIONS = "assignment-submissions"
+SUPABASE_BUCKET_CERTS = "official-documents"
+SUPABASE_BUCKET_AVATARS = "student-avatars"
 SUPABASE_BUCKET_BACKUPS = "database-backups"
 
 # Symmetric key (Fernet, 32 url-safe base64 bytes) used to encrypt the local
