@@ -13,13 +13,27 @@ export default function FAQAccordion() {
       <FadeIn><h2 className="font-heading text-3xl font-bold text-center mb-10">Frequently Asked Questions</h2></FadeIn>
       {loading ? (
         <p className="text-center text-text-secondary">Loading FAQs…</p>
+      ) : !faqs || faqs.length === 0 ? (
+        <p className="text-center text-text-secondary">FAQs coming soon.</p>
       ) : (
         <div className="space-y-3">
-          {(faqs || []).map((f, i) => {
+          {faqs.map((f, i) => {
             const isOpen = openId === f.id
             return (
               <FadeIn key={f.id} delay={i * 40}>
-                <div className="card cursor-pointer" onClick={() => setOpenId(isOpen ? null : f.id)}>
+                <div
+                  className="card cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isOpen}
+                  onClick={() => setOpenId(isOpen ? null : f.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setOpenId(isOpen ? null : f.id)
+                    }
+                  }}
+                >
                   <div className="flex items-center justify-between">
                     <p className="font-subheading font-semibold">{f.question}</p>
                     <ChevronDown
