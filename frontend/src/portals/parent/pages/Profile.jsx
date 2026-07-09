@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../lib/api";
+import AvatarUploader from "../../../components/AvatarUploader";
 import { Card, Loader, SectionTitle } from "../components/Common";
 
 export default function Profile() {
@@ -14,8 +15,15 @@ export default function Profile() {
   return (
     <Card>
       <SectionTitle>My profile</SectionTitle>
-      <div className="grid sm:grid-cols-2 gap-4 text-sm">
+      <AvatarUploader
+        api={api}
+        avatarUrl={profile.avatar_url}
+        name={profile.name}
+        onChange={(avatar_url) => setProfile((p) => ({ ...p, avatar_url }))}
+      />
+      <div className="grid sm:grid-cols-2 gap-4 text-sm mt-6">
         <div><p className="text-ink-secondary text-xs uppercase">Name</p><p className="font-semibold">{profile.name}</p></div>
+        <div><p className="text-ink-secondary text-xs uppercase">Parent ID</p><p className="font-semibold">{profile.parent_code || "—"}</p></div>
         <div><p className="text-ink-secondary text-xs uppercase">Email</p><p className="font-semibold">{profile.email}</p></div>
         <div><p className="text-ink-secondary text-xs uppercase">Phone</p><p className="font-semibold">{profile.phone_number || "—"}</p></div>
         <div><p className="text-ink-secondary text-xs uppercase">Address</p><p className="font-semibold">{profile.address || "—"}</p></div>

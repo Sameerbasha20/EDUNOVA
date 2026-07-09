@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, Loader } from "../components/Common";
 import IdCard from "../components/IdCard";
+import AvatarUploader from "../../../components/AvatarUploader";
 import api from "../lib/api";
 
 const FIELDS = [
@@ -30,7 +31,14 @@ export default function Profile() {
         <IdCard profile={profile} />
       </div>
       <Card className="lg:col-span-2">
-        <p className="font-heading font-semibold mb-4">Personal details</p>
+        <p className="font-heading font-semibold mb-4">Profile picture</p>
+        <AvatarUploader
+          api={api}
+          avatarUrl={profile.avatar_url}
+          name={profile.name}
+          onChange={(avatar_url) => setProfile((p) => ({ ...p, avatar_url }))}
+        />
+        <p className="font-heading font-semibold mt-6 mb-4">Personal details</p>
         <dl className="grid sm:grid-cols-2 gap-4">
           {FIELDS.map(([label, key]) => (
             <div key={key}>

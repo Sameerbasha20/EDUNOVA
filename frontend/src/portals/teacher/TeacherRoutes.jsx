@@ -16,6 +16,7 @@ import MarksEntry from "./pages/MarksEntry";
 import Messages from "./pages/Messages";
 import Notices from "./pages/Notices";
 import Performance from "./pages/Performance";
+import Profile from "./pages/Profile";
 import QuestionBank from "./pages/QuestionBank";
 import Timetable from "./pages/Timetable";
 
@@ -39,6 +40,7 @@ export default function TeacherRoutes() {
           <Route path="exams" element={<Exams />} />
           <Route path="marks-entry" element={<MarksEntry />} />
           <Route path="performance" element={<Performance />} />
+          <Route path="profile" element={<Profile />} />
           <Route path="messages" element={<Messages />} />
           <Route path="documents" element={<Documents />} />
           <Route path="timetable" element={<Timetable />} />

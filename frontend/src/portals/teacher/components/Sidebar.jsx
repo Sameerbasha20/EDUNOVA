@@ -1,13 +1,14 @@
 import {
   BookOpenCheck, CalendarCheck2, ClipboardList, FileStack, GraduationCap,
   Home, LayoutGrid, LibraryBig, LogOut, Mail, Megaphone, NotebookPen,
-  ScrollText, Users, X,
+  ScrollText, User, Users, X,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const NAV = [
   { to: "/teacher", label: "Dashboard", icon: Home, end: true },
+  { to: "/teacher/profile", label: "Profile", icon: User },
   { to: "/teacher/classes", label: "Class Management", icon: LayoutGrid },
   { to: "/teacher/attendance", label: "Attendance", icon: CalendarCheck2 },
   { to: "/teacher/homework", label: "Homework", icon: NotebookPen },
