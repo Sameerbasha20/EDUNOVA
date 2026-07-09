@@ -373,7 +373,18 @@ class QuizDetailView(StudentOnlyMixin, APIView):
         return Response(serialise(quiz))
 
     def post(self, request, quiz_id):
-        return Response({"score": 0, "detail": "Quiz submitted. Scoring workflow can be extended."})
+        if not table_exists("portal_quiz_question"):
+            return Response({"score": 0, "total": 0, "percentage": 0, "passed": False})
+        questions = rows("SELECT id, correct_answer FROM portal_quiz_question WHERE quiz_id=%s", [quiz_id])
+        total = len(questions)
+        # JSON object keys are always strings, so a question id of 12 arrives
+        # as answers["12"], not answers[12].
+        answers = request.data.get("answers") or {}
+        score = sum(1 for q in questions if str(answers.get(str(q["id"]))) == str(q["correct_answer"]))
+        percentage = round((score / total) * 100, 1) if total else 0
+        quiz = row("SELECT passing_score FROM portal_quiz WHERE id=%s", [quiz_id]) if table_exists("portal_quiz") else None
+        passing_score = quiz["passing_score"] if quiz else 40
+        return Response({"score": score, "total": total, "percentage": percentage, "passed": percentage >= passing_score})
 
 
 class ExamListView(StudentOnlyMixin, APIView):
