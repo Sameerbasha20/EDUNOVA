@@ -83,7 +83,15 @@ if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.parse(
             DATABASE_URL,
-            conn_max_age=600,
+            # 0 = a fresh connection per request, no persistent reuse. Required
+            # when DATABASE_URL points at Supabase's PgBouncer pooler (session
+            # or transaction mode): the pooler can recycle/close the backend
+            # connection between uses in ways Django's persistent-connection
+            # tracking doesn't detect, which surfaced as "connection already
+            # closed" InterfaceErrors partway through a test run. Safe to raise
+            # again if DATABASE_URL is ever pointed at the direct (unpooled)
+            # host instead.
+            conn_max_age=config("DB_CONN_MAX_AGE", default=0, cast=int),
             ssl_require=config("DB_SSL_REQUIRE", default=True, cast=bool),
         )
     }

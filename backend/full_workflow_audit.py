@@ -121,15 +121,11 @@ if class_id:
     check("GET class roster", s == 200, f"{s}: {roster_d}")
     a_student_id = roster_d[0]["student"] if s == 200 and roster_d else None
 
-    d, s = get("/teacher/exams/", te)
-    subject_id = None
-    if s == 200 and d:
-        pass  # exam list doesn't give subject_id directly; fall back below
-
-    # Get a subject id from admin classes/subjects listing (any subject works
-    # for exercising the write path)
-    subj_d, s = get("/admin-portal/subjects/", ad)
-    subject_id = subj_d[0]["id"] if s == 200 and subj_d else None
+    # Must be the subject this teacher is actually allocated to teach for
+    # this class -- HomeworkView/AssignmentView/TeacherExamView now check
+    # allocation ownership, so a subject_id from any other class/teacher
+    # correctly gets rejected with 403.
+    subject_id = classes_d[0]["subject_id"] if classes_d else None
 
     if a_student_id:
         d, s = post("/teacher/attendance/", {
