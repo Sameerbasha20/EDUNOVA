@@ -9,6 +9,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .services.email_service import send_login_otp_email
@@ -221,3 +222,22 @@ def resend_otp(request):
         )
 
     return Response({"detail": "OTP resent successfully."})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def logout(request):
+    """Blacklists the given refresh token so it can't be used again, even
+    though the caller's access token is still technically valid for the
+    rest of its 6-hour lifetime (that's an accepted tradeoff of stateless
+    JWTs -- blacklisting only the refresh token prevents ongoing renewal,
+    which is what actually matters for a stolen-token scenario). AllowAny
+    (not IsAuthenticated) because logout should still succeed even if the
+    access token already expired -- all it needs is the refresh token."""
+    refresh = request.data.get("refresh")
+    if refresh:
+        try:
+            RefreshToken(refresh).blacklist()
+        except TokenError:
+            pass
+    return Response({"detail": "Logged out."}, status=status.HTTP_205_RESET_CONTENT)

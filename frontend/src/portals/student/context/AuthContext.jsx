@@ -61,8 +61,13 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    const refresh = localStorage.getItem(KEYS.refresh);
     Object.values(KEYS).forEach((k) => localStorage.removeItem(k));
     setUser(null);
+    // Fire-and-forget: the user is logged out of this device immediately
+    // either way, but blacklisting server-side stops the token being reused
+    // elsewhere (e.g. if it had already been copied out of storage).
+    if (refresh) otpAuth.logout(refresh).catch(() => {});
   }
 
   return (

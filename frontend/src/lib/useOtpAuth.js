@@ -52,3 +52,15 @@ export async function resendOtp(userId) {
   });
   return data;
 }
+
+/**
+ * Logout — blacklists the refresh token server-side so it can't be reused
+ * even if it was copied out of browser storage before the user logged out.
+ * Best-effort: callers should clear local state regardless of whether this
+ * succeeds (e.g. if the network is down, the user should still be logged
+ * out of this device).
+ */
+export async function logout(refresh) {
+  const { data } = await authClient.post("/auth/logout/", { refresh });
+  return data;
+}

@@ -34,6 +34,10 @@ api.interceptors.response.use(
       try {
         const { data } = await axios.post(`${BASE_URL}/auth/refresh/`, { refresh });
         localStorage.setItem("edunova_teacher_access", data.access);
+        // Backend rotates + blacklists refresh tokens on each use -- the old
+        // one stored above is now invalid, so the new one MUST replace it or
+        // the very next refresh attempt fails and logs the user out.
+        if (data.refresh) localStorage.setItem("edunova_teacher_refresh", data.refresh);
         queue.forEach(({ resolve, original: o }) => {
           o.headers.Authorization = `Bearer ${data.access}`;
           resolve(api(o));

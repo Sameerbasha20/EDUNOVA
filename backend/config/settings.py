@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "django_filters",
     "apps.cms",
@@ -188,6 +189,13 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
     "USER_ID_FIELD": "id",
     "USER_ID_CLAIM": "user_id",
+    # Without these, a refresh token stolen from browser storage (XSS, shared
+    # device, browser extension) stays valid for the full 7 days even after
+    # the user hits "Log out" -- rotation + blacklist-on-rotation means each
+    # refresh call invalidates the previous refresh token, and /auth/logout/
+    # (below) blacklists it immediately on logout.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # allows any localhost port in dev; False in production (DEBUG=False)

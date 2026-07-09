@@ -9,6 +9,7 @@ urlpatterns = [
     path("auth/verify-otp/", auth_views.login_step2_verify_otp, name="login-verify-otp"),
     path("auth/resend-otp/", auth_views.resend_otp, name="resend-otp"),
     path("auth/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("auth/logout/", auth_views.logout, name="logout"),
 
     # Profile picture -- shared across every portal (any authenticated role)
     path("profile/avatar/", views.AvatarView.as_view()),
