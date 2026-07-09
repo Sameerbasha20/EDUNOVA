@@ -14,6 +14,15 @@ from .views import row, rows, serialise, table_exists
 
 User = get_user_model()
 
+# Excludes visually confusable characters (0/O, 1/l/I) -- these temp
+# passwords are read off a screen and hand-typed into a login form, so a
+# normal random charset silently produces unloginable accounts.
+_TEMP_PASSWORD_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+
+
+def _generate_temp_password():
+    return get_random_string(10, allowed_chars=_TEMP_PASSWORD_CHARS)
+
 
 class AdminMixin:
     permission_classes = [IsAdmin]
@@ -99,8 +108,8 @@ def _generate_credentials(enquiry):
         parent = User.objects.filter(id=enquiry.parent_user_id).first() if enquiry.parent_user_id else None
         return student, parent, None
 
-    temp_password = get_random_string(10)
-    parent_temp_password = get_random_string(10)
+    temp_password = _generate_temp_password()
+    parent_temp_password = _generate_temp_password()
 
     with transaction.atomic():
         parent = User.objects.filter(email__iexact=enquiry.parent_email).first()
@@ -324,7 +333,7 @@ class UserListView(AdminMixin, APIView):
             if table_exists("portal_subject") and not row("SELECT 1 AS ok FROM portal_subject WHERE id=%s", [subject_id]):
                 return Response({"detail": "Invalid subject_id."}, status=400)
 
-        temp_password = get_random_string(10)
+        temp_password = _generate_temp_password()
         username = _unique_username(d.get("username") or d.get("email", "user").split("@")[0])
         user = User.objects.create_user(
             username=username,
@@ -391,7 +400,7 @@ class UserDetailView(AdminMixin, APIView):
             target = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response({"detail": "User not found."}, status=404)
-        temp_password = get_random_string(10)
+        temp_password = _generate_temp_password()
         target.set_password(temp_password)
         target.save(update_fields=["password"])
         log_action(request.user, "user.reset_password", "user", user_id, {})
