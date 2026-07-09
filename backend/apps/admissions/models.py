@@ -1,9 +1,22 @@
 import uuid
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db import models
+
+MAX_DOCUMENT_BYTES = 5 * 1024 * 1024  # 5MB
 
 
 def generate_registration_number():
     return f"ADM-{uuid.uuid4().hex[:10].upper()}"
+
+
+def validate_document_size(value):
+    # id_proof_document is uploaded through a public, unauthenticated
+    # (AllowAny) endpoint -- with no size limit at all, anyone on the
+    # internet could upload arbitrarily large files with no login required,
+    # a straightforward disk-exhaustion DoS vector.
+    if value.size > MAX_DOCUMENT_BYTES:
+        raise ValidationError(f"File too large ({value.size / (1024 * 1024):.1f}MB) — max size is 5MB.")
 
 
 class AdmissionEnquiry(models.Model):
@@ -43,7 +56,15 @@ class AdmissionEnquiry(models.Model):
     address = models.TextField(blank=True)
 
     scholarship_applied = models.BooleanField(default=False)
-    id_proof_document = models.FileField(upload_to="admissions/documents/", blank=True, null=True)
+    id_proof_document = models.FileField(
+        upload_to="admissions/documents/",
+        blank=True,
+        null=True,
+        validators=[
+            FileExtensionValidator(allowed_extensions=["pdf", "jpg", "jpeg", "png"]),
+            validate_document_size,
+        ],
+    )
 
     needs_transport = models.BooleanField(default=False)
     # Free text, same reasoning as target_class above: the public portal
