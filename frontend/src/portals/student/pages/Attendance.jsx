@@ -5,17 +5,24 @@ import api from "../lib/api";
 
 const STATUS_TONE = { Present: "green", Absent: "red", Late: "gold", Medical_Leave: "blue" };
 const COLORS = { Present: "#10B981", Absent: "#DC2626", Late: "#FBBF24", "Medical Leave": "#1E3A8A" };
+const EMPTY_ATTENDANCE = { summary: { present: 0, absent: 0, late: 0, medical_leave: 0, percentage: null }, records: [] };
 
 export default function Attendance() {
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     setLoading(true);
+    setError(false);
     api
       .get("/student/attendance/", { params: { month } })
       .then(({ data }) => setData(data))
+      .catch(() => {
+        setData(EMPTY_ATTENDANCE);
+        setError(true);
+      })
       .finally(() => setLoading(false));
   }, [month]);
 
@@ -39,6 +46,12 @@ export default function Attendance() {
           className="rounded-xl border border-slate-200 px-3 py-2 text-sm focus-ring outline-none"
         />
       </div>
+
+      {error && (
+        <p className="text-sm text-danger bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+          Could not load attendance right now. Please try again shortly.
+        </p>
+      )}
 
       {loading ? (
         <Loader rows={4} />

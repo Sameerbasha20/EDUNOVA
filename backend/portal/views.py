@@ -82,6 +82,22 @@ def current_class_for_student(user_id):
     )
 
 
+def _course_in_student_class(user_id, course_id):
+    """True only if course_id belongs to a course in the class this student
+    is actually enrolled in -- every endpoint that takes a client-supplied
+    course_id/quiz_id must call this first, otherwise any student could
+    reach a quiz/course belonging to a class they aren't enrolled in just
+    by guessing/incrementing an id (the same ownership gap already closed
+    for teachers via teacher_views._teaches())."""
+    if not course_id:
+        return False
+    cls = current_class_for_student(user_id)
+    if not cls:
+        return False
+    course = row("SELECT class_id FROM portal_course WHERE id=%s", [course_id])
+    return bool(course) and course["class_id"] == cls["class_id"]
+
+
 def student_profile_payload(user):
     full_name = user.get_full_name().strip() or user.username
     base = {
@@ -332,6 +348,10 @@ class AssignmentSubmitView(StudentOnlyMixin, APIView):
     def post(self, request, assignment_id):
         if not table_exists("portal_assignment_submission"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
+        cls = current_class_for_student(request.user.id)
+        assignment = row("SELECT class_id FROM portal_assignment WHERE id=%s", [assignment_id]) if table_exists("portal_assignment") else None
+        if not assignment or not cls or assignment["class_id"] != cls["class_id"]:
+            return Response({"detail": "Assignment not found."}, status=404)
         url = request.data.get("submission_url") or request.data.get("file_url")
         if not url:
             return Response({"detail": "submission_url is required."}, status=400)
@@ -370,12 +390,19 @@ class CourseListView(StudentOnlyMixin, APIView):
 class QuizDetailView(StudentOnlyMixin, APIView):
     def get(self, request, quiz_id):
         if not table_exists("portal_quiz"):
-            return Response({"id": quiz_id, "title": "Quiz", "questions": []})
-        quiz = row("SELECT id, title, duration_minutes, passing_score FROM portal_quiz WHERE id=%s", [quiz_id]) or {"id": quiz_id, "title": "Quiz"}
+            return Response({"detail": "Quiz not found."}, status=404)
+        quiz = row("SELECT id, title, duration_minutes, passing_score, course_id FROM portal_quiz WHERE id=%s", [quiz_id])
+        if not quiz or not _course_in_student_class(request.user.id, quiz.get("course_id")):
+            return Response({"detail": "Quiz not found."}, status=404)
         quiz["questions"] = rows("SELECT id, question_text, options FROM portal_quiz_question WHERE quiz_id=%s", [quiz_id]) if table_exists("portal_quiz_question") else []
         return Response(serialise(quiz))
 
     def post(self, request, quiz_id):
+        if not table_exists("portal_quiz"):
+            return Response({"detail": "Quiz not found."}, status=404)
+        quiz = row("SELECT passing_score, course_id FROM portal_quiz WHERE id=%s", [quiz_id])
+        if not quiz or not _course_in_student_class(request.user.id, quiz.get("course_id")):
+            return Response({"detail": "Quiz not found."}, status=404)
         if not table_exists("portal_quiz_question"):
             return Response({"score": 0, "total": 0, "percentage": 0, "passed": False})
         questions = rows("SELECT id, correct_answer FROM portal_quiz_question WHERE quiz_id=%s", [quiz_id])
@@ -385,8 +412,7 @@ class QuizDetailView(StudentOnlyMixin, APIView):
         answers = request.data.get("answers") or {}
         score = sum(1 for q in questions if str(answers.get(str(q["id"]))) == str(q["correct_answer"]))
         percentage = round((score / total) * 100, 1) if total else 0
-        quiz = row("SELECT passing_score FROM portal_quiz WHERE id=%s", [quiz_id]) if table_exists("portal_quiz") else None
-        passing_score = quiz["passing_score"] if quiz else 40
+        passing_score = quiz["passing_score"] if quiz["passing_score"] is not None else 40
         return Response({"score": score, "total": total, "percentage": percentage, "passed": percentage >= passing_score})
 
 
@@ -473,9 +499,16 @@ class InitiatePaymentView(StudentOnlyMixin, APIView):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
         fee_id = request.data.get("fee_structure_id")
         method = request.data.get("payment_method") or "Online"
-        fee = row("SELECT total_amount FROM portal_fee_structure WHERE id=%s", [fee_id])
-        if not fee:
+        cls = current_class_for_student(request.user.id)
+        fee = row("SELECT total_amount, class_id FROM portal_fee_structure WHERE id=%s", [fee_id])
+        if not fee or not cls or fee["class_id"] != cls["class_id"]:
             return Response({"detail": "Invalid fee."}, status=400)
+        already_paid = row(
+            "SELECT 1 AS ok FROM portal_payment WHERE student_id=%s AND fee_structure_id=%s AND status='Success'",
+            [request.user.id, fee_id],
+        )
+        if already_paid:
+            return Response({"detail": "This fee has already been paid."}, status=400)
         tx = f"EDN-{uuid4().hex[:10].upper()}"
         with connection.cursor() as cursor:
             cursor.execute(

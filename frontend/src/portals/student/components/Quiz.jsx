@@ -8,6 +8,7 @@ export default function Quiz({ courseId, onClose }) {
   // in is actually the quiz id (see Lms.jsx) — kept as a single id param.
   const quizId = courseId;
   const [quiz, setQuiz] = useState(null);
+  const [loadError, setLoadError] = useState(false);
   const [answers, setAnswers] = useState({});
   const [secondsLeft, setSecondsLeft] = useState(null);
   const [result, setResult] = useState(null);
@@ -15,10 +16,13 @@ export default function Quiz({ courseId, onClose }) {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    api.get(`/student/quizzes/${quizId}/`).then(({ data }) => {
-      setQuiz(data);
-      setSecondsLeft(data.duration_minutes * 60);
-    });
+    api
+      .get(`/student/quizzes/${quizId}/`)
+      .then(({ data }) => {
+        setQuiz(data);
+        setSecondsLeft(data.duration_minutes * 60);
+      })
+      .catch(() => setLoadError(true));
   }, [quizId]);
 
   useEffect(() => {
@@ -39,6 +43,8 @@ export default function Quiz({ courseId, onClose }) {
     try {
       const { data } = await api.post(`/student/quizzes/${quizId}/`, { answers });
       setResult(data);
+    } catch {
+      setLoadError(true);
     } finally {
       setSubmitting(false);
     }
@@ -63,7 +69,14 @@ export default function Quiz({ courseId, onClose }) {
         </div>
 
         <div className="p-6">
-          {!quiz ? (
+          {loadError ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-danger mb-4">This quiz could not be loaded — it may no longer be available.</p>
+              <button onClick={onClose} className="bg-academic-blue text-white rounded-xl px-5 py-2 text-sm font-medium">
+                Close
+              </button>
+            </div>
+          ) : !quiz ? (
             <Loader rows={3} />
           ) : result ? (
             <div className="text-center py-6">
