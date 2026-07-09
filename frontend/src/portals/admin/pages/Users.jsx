@@ -5,10 +5,14 @@ import { Badge, Card, EmptyState, Loader, SectionTitle, Toast } from "../compone
 const ROLES = ["Student", "Teacher", "Parent", "Admin", "Employee"];
 const ROLE_TONE = { Student: "blue", Teacher: "green", Parent: "gold", Admin: "red", Employee: "slate" };
 
+const EMPTY_FORM = { role: "Student", first_name: "", last_name: "", email: "", department: "", class_id: "", subject_id: "" };
+
 export default function Users() {
   const [users, setUsers] = useState(null);
   const [roleFilter, setRoleFilter] = useState("");
-  const [form, setForm] = useState({ role: "Student", first_name: "", last_name: "", email: "" });
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [classes, setClasses] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [toast, setToast] = useState("");
   const [created, setCreated] = useState(null);
 
@@ -18,12 +22,18 @@ export default function Users() {
 
   useEffect(() => { load(); }, [roleFilter]);
 
+  useEffect(() => {
+    if (form.role !== "Teacher") return;
+    api.get("/admin-portal/classes/").then(({ data }) => setClasses(data)).catch(() => setClasses([]));
+    api.get("/admin-portal/subjects/").then(({ data }) => setSubjects(data)).catch(() => setSubjects([]));
+  }, [form.role]);
+
   async function createUser(e) {
     e.preventDefault();
     try {
       const { data } = await api.post("/admin-portal/users/", form);
       setCreated(data);
-      setForm({ role: "Student", first_name: "", last_name: "", email: "" });
+      setForm(EMPTY_FORM);
       load();
     } catch (err) {
       setToast(err?.response?.data?.detail || "Could not create user.");
@@ -59,6 +69,19 @@ export default function Users() {
           <input required placeholder="First name" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
           <input placeholder="Last name" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
           <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+          {form.role === "Teacher" && (
+            <>
+              <input required placeholder="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" />
+              <select required value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="">Assign class…</option>
+                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}-{c.section}</option>)}
+              </select>
+              <select required value={form.subject_id} onChange={(e) => setForm({ ...form, subject_id: e.target.value })} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                <option value="">Assign subject…</option>
+                {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </>
+          )}
           <button className="bg-academic-blue text-white rounded-xl py-2 font-medium">Create</button>
         </form>
       </Card>

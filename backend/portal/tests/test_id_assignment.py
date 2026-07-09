@@ -78,17 +78,69 @@ class UserCreationAssignsIdTests(TestCase):
 
     def setUp(self):
         self.admin = _make_admin()
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO portal_class (name, section) VALUES ('IdTest', 'X') RETURNING id")
+            self.class_id = cursor.fetchone()[0]
+            cursor.execute("INSERT INTO portal_subject (name, subject_code) VALUES ('Id Test Subject', 'IDT101') RETURNING id")
+            self.subject_id = cursor.fetchone()[0]
 
     def test_create_teacher_via_admin_portal_gets_employee_code(self):
         resp = self.client.post(
             "/api/admin-portal/users/",
-            data={"role": "Teacher", "email": "new.teacher.idtest@edunova.edu", "first_name": "New", "last_name": "Teacher"},
+            data={
+                "role": "Teacher", "email": "new.teacher.idtest@edunova.edu", "first_name": "New", "last_name": "Teacher",
+                "department": "Mathematics", "class_id": self.class_id, "subject_id": self.subject_id,
+            },
             content_type="application/json",
             **_auth_header(self.admin),
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data["id_number"].startswith("EMP-"))
+        row = connection.cursor()
+        row.execute("SELECT department FROM portal_teacher_profile WHERE employee_code=%s", [data["id_number"]])
+        self.assertEqual(row.fetchone()[0], "Mathematics")
+        row.execute(
+            "SELECT 1 FROM portal_academic_allocation WHERE class_id=%s AND subject_id=%s AND teacher_id=%s",
+            [self.class_id, self.subject_id, data["id"]],
+        )
+        self.assertIsNotNone(row.fetchone())
+
+    def test_create_teacher_without_department_is_rejected(self):
+        resp = self.client.post(
+            "/api/admin-portal/users/",
+            data={
+                "role": "Teacher", "email": "no.department.idtest@edunova.edu", "first_name": "No", "last_name": "Department",
+                "class_id": self.class_id, "subject_id": self.subject_id,
+            },
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_create_teacher_without_assignment_is_rejected(self):
+        resp = self.client.post(
+            "/api/admin-portal/users/",
+            data={
+                "role": "Teacher", "email": "no.assignment.idtest@edunova.edu", "first_name": "No", "last_name": "Assignment",
+                "department": "Science",
+            },
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_create_teacher_with_invalid_class_is_rejected(self):
+        resp = self.client.post(
+            "/api/admin-portal/users/",
+            data={
+                "role": "Teacher", "email": "bad.class.idtest@edunova.edu", "first_name": "Bad", "last_name": "Class",
+                "department": "Science", "class_id": 999999, "subject_id": self.subject_id,
+            },
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(resp.status_code, 400)
 
     def test_create_parent_via_admin_portal_gets_parent_code(self):
         resp = self.client.post(

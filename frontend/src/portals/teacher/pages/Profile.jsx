@@ -8,6 +8,7 @@ const FIELDS = [
   ["Email", "email"],
   ["Phone", "phone_number"],
   ["Employee ID", "employee_code"],
+  ["Department", "department"],
   ["Qualification", "qualification"],
   ["Specialization", "specialization"],
   ["Date of joining", "date_of_joining"],

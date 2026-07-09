@@ -58,6 +58,7 @@ class TeacherProfileView(TeacherMixin, APIView):
             "user_type": "Teacher",
             "phone_number": "",
             "employee_code": "—",
+            "department": "",
             "qualification": "",
             "specialization": "",
             "date_of_joining": None,
@@ -67,7 +68,7 @@ class TeacherProfileView(TeacherMixin, APIView):
             p = row("SELECT phone_number, avatar_url FROM portal_user_profile WHERE user_id=%s", [u.id])
             if p: profile.update(p)
         if table_exists("portal_teacher_profile"):
-            t = row("SELECT employee_code, qualification, specialization, date_of_joining FROM portal_teacher_profile WHERE user_id=%s", [u.id])
+            t = row("SELECT employee_code, department, qualification, specialization, date_of_joining FROM portal_teacher_profile WHERE user_id=%s", [u.id])
             if t: profile.update(t)
         return Response(serialise(profile))
 

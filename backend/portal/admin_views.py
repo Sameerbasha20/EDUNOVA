@@ -168,7 +168,7 @@ def _generate_credentials(enquiry):
     return student, parent, credentials
 
 
-def assign_role_id(user, role):
+def assign_role_id(user, role, department=None):
     """Create (or backfill) the role-specific profile row with a fresh ID
     number for a user who doesn't already have one: admission_number
     (Student), employee_code (Teacher), parent_code (Parent). Idempotent --
@@ -187,15 +187,22 @@ def assign_role_id(user, role):
         return admission_number
 
     if role == "Teacher" and table_exists("portal_teacher_profile"):
-        existing = row("SELECT employee_code FROM portal_teacher_profile WHERE user_id=%s", [user.id])
+        existing = row("SELECT employee_code, department FROM portal_teacher_profile WHERE user_id=%s", [user.id])
         if existing and existing["employee_code"]:
+            if department and not existing.get("department"):
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE portal_teacher_profile SET department=%s WHERE user_id=%s",
+                        [department, user.id],
+                    )
             return existing["employee_code"]
         employee_code = f"EMP-{get_random_string(8).upper()}"
         with connection.cursor() as cursor:
             cursor.execute(
-                "INSERT INTO portal_teacher_profile (user_id, employee_code) VALUES (%s,%s) "
-                "ON CONFLICT (user_id) DO UPDATE SET employee_code=EXCLUDED.employee_code",
-                [user.id, employee_code],
+                "INSERT INTO portal_teacher_profile (user_id, employee_code, department) VALUES (%s,%s,%s) "
+                "ON CONFLICT (user_id) DO UPDATE SET employee_code=EXCLUDED.employee_code, "
+                "department=COALESCE(EXCLUDED.department, portal_teacher_profile.department)",
+                [user.id, employee_code, department],
             )
         return employee_code
 
@@ -300,6 +307,23 @@ class UserListView(AdminMixin, APIView):
             return Response({"detail": "role must be one of Student/Teacher/Parent/Admin/Employee."}, status=400)
         if User.objects.filter(email__iexact=d.get("email", "")).exists():
             return Response({"detail": "A user with this email already exists."}, status=400)
+
+        department = (d.get("department") or "").strip()
+        class_id = d.get("class_id")
+        subject_id = d.get("subject_id")
+        if role == "Teacher":
+            if not department:
+                return Response({"detail": "department is required for Teacher accounts."}, status=400)
+            if not class_id or not subject_id:
+                return Response(
+                    {"detail": "class_id and subject_id are required to assign the new teacher to a class/subject."},
+                    status=400,
+                )
+            if table_exists("portal_class") and not row("SELECT 1 AS ok FROM portal_class WHERE id=%s", [class_id]):
+                return Response({"detail": "Invalid class_id."}, status=400)
+            if table_exists("portal_subject") and not row("SELECT 1 AS ok FROM portal_subject WHERE id=%s", [subject_id]):
+                return Response({"detail": "Invalid subject_id."}, status=400)
+
         temp_password = get_random_string(10)
         username = _unique_username(d.get("username") or d.get("email", "user").split("@")[0])
         user = User.objects.create_user(
@@ -319,7 +343,14 @@ class UserListView(AdminMixin, APIView):
                     "ON CONFLICT (user_id) DO UPDATE SET user_type=EXCLUDED.user_type",
                     [user.id, role, d.get("phone_number", "")],
                 )
-        id_number = assign_role_id(user, role)
+        id_number = assign_role_id(user, role, department=department if role == "Teacher" else None)
+        if role == "Teacher" and table_exists("portal_academic_allocation"):
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO portal_academic_allocation (class_id, subject_id, teacher_id) VALUES (%s,%s,%s) "
+                    "ON CONFLICT (class_id, subject_id, teacher_id) DO NOTHING",
+                    [class_id, subject_id, user.id],
+                )
         log_action(request.user, "user.create", "user", user.id, {"role": role, "id_number": id_number})
         return Response({
             "id": user.id, "username": user.username, "temp_password": temp_password,

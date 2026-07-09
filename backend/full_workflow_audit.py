@@ -330,8 +330,17 @@ if reg_no2:
     check("POST admissions action reject", s == 200 and d.get("status") == "Rejected", f"{s}: {d}")
 
 # Users
+d, s = post("/admin-portal/classes/", {"name": f"Audit{RUN_TAG}", "section": "Z", "curriculum": "CBSE", "room_number": "999"}, ad)
+check("POST admin-portal/classes/", s == 200, f"{s}: {d}")
+new_class_id = d.get("id") if s == 200 else None
+
+d, s = post("/admin-portal/subjects/", {"name": "Audit Subject", "subject_code": f"AUD{RUN_TAG}", "type": "Core"}, ad)
+check("POST admin-portal/subjects/", s == 200, f"{s}: {d}")
+new_subject_id = d.get("id") if s == 200 else None
+
 d, s = post("/admin-portal/users/", {
     "role": "Teacher", "email": f"audit.newteacher.{RUN_TAG}@edunova.edu", "first_name": "Audit", "last_name": "Teacher",
+    "department": "Science", "class_id": new_class_id, "subject_id": new_subject_id,
 }, ad)
 check("POST admin-portal/users/ (create)", s == 200, f"{s}: {d}")
 new_user_id = d.get("id") if s == 200 else None
@@ -343,13 +352,6 @@ if new_user_id:
 
 d, s = get("/admin-portal/roles/", ad)
 check("GET admin-portal/roles/", s == 200, f"{s}: {d}")
-
-d, s = post("/admin-portal/classes/", {"name": f"Audit{RUN_TAG}", "section": "Z", "curriculum": "CBSE", "room_number": "999"}, ad)
-check("POST admin-portal/classes/", s == 200, f"{s}: {d}")
-new_class_id = d.get("id") if s == 200 else None
-
-d, s = post("/admin-portal/subjects/", {"name": "Audit Subject", "subject_code": f"AUD{RUN_TAG}", "type": "Core"}, ad)
-check("POST admin-portal/subjects/", s == 200, f"{s}: {d}")
 
 d, s = post("/admin-portal/vehicles/", {"vehicle_number": f"AUD-{RUN_TAG}", "capacity": 40, "maintenance_status": "OK"}, ad)
 check("POST admin-portal/vehicles/", s == 200, f"{s}: {d}")
