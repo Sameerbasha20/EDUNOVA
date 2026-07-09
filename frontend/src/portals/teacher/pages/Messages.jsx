@@ -69,8 +69,8 @@ export default function Messages() {
         <div className="flex-1 overflow-y-auto space-y-1">
           {inbox.length ? (
             inbox.map((m) => {
-              const otherId = m.sender_name === me.name ? m.receiver : m.sender;
-              const otherName = m.sender_name === me.name ? m.receiver_name : m.sender_name;
+              const otherId = m.sender === me.id ? m.receiver : m.sender;
+              const otherName = m.sender === me.id ? m.receiver_name : m.sender_name;
               return (
                 <button
                   key={m.id}
@@ -96,7 +96,7 @@ export default function Messages() {
             <p className="font-heading font-semibold mb-3 pb-3 border-b border-slate-100">{active.name}</p>
             <div className="flex-1 overflow-y-auto space-y-2 mb-3">
               {thread?.map((m) => {
-                const mine = m.sender_name === me.name;
+                const mine = m.sender === me.id;
                 return (
                   <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                     <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${mine ? "bg-academic-blue text-white" : "bg-surface-light"}`}>

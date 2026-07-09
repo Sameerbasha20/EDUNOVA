@@ -12,14 +12,14 @@ export default function Support() {
     e.preventDefault();
     setError("");
     try {
-      // Post to the teacher messages endpoint — sends to user id 1 (admin/support)
-      // Replace receiver id with your actual support staff user id
-      await api.post("/teacher/messages/", { receiver: 1, message_text: message });
+      // Sends to user id 1 (admin/support account) via the student's own
+      // messages endpoint.
+      await api.post("/student/messages/", { receiver: 1, message_text: message });
+      setSent(true);
+      setMessage("");
     } catch {
-      // non-critical — show success regardless
+      setError("Couldn't send your message right now. Please try again or email support@edunovaacademy.edu.in directly.");
     }
-    setSent(true);
-    setMessage("");
   }
 
   return (
@@ -61,6 +61,7 @@ export default function Support() {
         </div>
       </Card>
       <Toast message={sent ? "Message sent — we'll follow up by email." : ""} onClose={() => setSent(false)} />
+      <Toast message={error} tone="danger" onClose={() => setError("")} />
     </div>
   );
 }

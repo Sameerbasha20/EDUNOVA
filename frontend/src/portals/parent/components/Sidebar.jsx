@@ -1,13 +1,14 @@
 import {
   Bus, CalendarDays, FileText, Home, LogOut, MessageSquare,
   NotebookPen, Bell, ScrollText, Wallet, Users2, CalendarClock,
-  Heart, X, BedDouble,
+  Heart, X, BedDouble, User,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const NAV = [
   { to: "/parent", label: "Dashboard", icon: Home, end: true },
+  { to: "/parent/profile", label: "Profile", icon: User },
   { to: "/parent/attendance", label: "Attendance", icon: CalendarDays },
   { to: "/parent/homework", label: "Homework", icon: NotebookPen },
   { to: "/parent/results", label: "Results", icon: ScrollText },
