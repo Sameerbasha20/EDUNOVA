@@ -7,6 +7,10 @@ import PortalNotFound from "../../components/PortalNotFound";
 import Dashboard from "./pages/Dashboard";
 import Admissions from "./pages/Admissions";
 import Users from "./pages/Users";
+import Students from "./pages/Students";
+import StudentDetail from "./pages/StudentDetail";
+import Teachers from "./pages/Teachers";
+import TeacherDetail from "./pages/TeacherDetail";
 import Classes from "./pages/Classes";
 import Fees from "./pages/Fees";
 import Transport from "./pages/Transport";
@@ -37,6 +41,10 @@ export default function AdminRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="admissions" element={<Admissions />} />
           <Route path="users" element={<Users />} />
+          <Route path="students" element={<Students />} />
+          <Route path="students/:id" element={<StudentDetail />} />
+          <Route path="teachers" element={<Teachers />} />
+          <Route path="teachers/:id" element={<TeacherDetail />} />
           <Route path="classes" element={<Classes />} />
           <Route path="fees" element={<Fees />} />
           <Route path="transport" element={<Transport />} />

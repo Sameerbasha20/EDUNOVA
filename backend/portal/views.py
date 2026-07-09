@@ -88,6 +88,7 @@ def student_profile_payload(user):
         "id": user.id,
         "name": full_name,
         "email": user.email,
+        "is_active": user.is_active,
         "phone_number": "",
         "admission_number": "—",
         "class_name": "Not assigned",

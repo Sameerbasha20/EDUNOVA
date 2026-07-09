@@ -16,8 +16,8 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={UserPlus} label="Pending Admissions" value={data.pending_admissions} accent="orange" />
-        <StatCard icon={GraduationCap} label="Students" value={data.total_students} accent="blue" />
-        <StatCard icon={Users} label="Teachers" value={data.total_teachers} accent="green" />
+        <StatCard icon={GraduationCap} label="Students" value={data.total_students} accent="blue" to="/admin/students" />
+        <StatCard icon={Users} label="Teachers" value={data.total_teachers} accent="green" to="/admin/teachers" />
         <StatCard icon={Users} label="Parents" value={data.total_parents} accent="gold" />
         <StatCard icon={Wallet} label="Fees Collected (This Month)" value={`₹${data.fee_collected_this_month}`} accent="green" />
         <StatCard icon={CalendarClock} label="Open Leave Requests" value={data.open_leaves} accent="orange" />

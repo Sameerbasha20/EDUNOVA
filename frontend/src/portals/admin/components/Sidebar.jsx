@@ -10,6 +10,8 @@ const NAV = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/admissions", label: "Admissions", icon: UserPlus },
   { to: "/admin/users", label: "Users & Roles", icon: Users },
+  { to: "/admin/students", label: "Students", icon: GraduationCap },
+  { to: "/admin/teachers", label: "Teachers", icon: BookOpen },
   { to: "/admin/classes", label: "Classes & Subjects", icon: School },
   { to: "/admin/fees", label: "Fees", icon: Wallet },
   { to: "/admin/exam-results", label: "Rank Lists & Report Cards", icon: Trophy },

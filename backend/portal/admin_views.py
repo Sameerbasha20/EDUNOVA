@@ -10,7 +10,8 @@ from rest_framework.views import APIView
 
 from apps.admissions.models import AdmissionEnquiry
 from .roles import IsAdmin, get_role, log_action
-from .views import row, rows, serialise, table_exists
+from .views import row, rows, serialise, table_exists, student_profile_payload
+from .teacher_views import teacher_classes, teacher_profile_payload
 
 User = get_user_model()
 
@@ -415,6 +416,98 @@ class RolesView(AdminMixin, APIView):
             grp = Group.objects.filter(name=r).first()
             counts[r] = grp.user_set.count() if grp else 0
         return Response(counts)
+
+
+class StudentListView(AdminMixin, APIView):
+    """All students, optionally filtered by ?class_id=. Each row includes
+    their current class (latest academic_year enrollment) for the class
+    filter dropdown on the frontend."""
+
+    def get(self, request):
+        if not table_exists("portal_student_profile"):
+            return Response([])
+        class_id = request.query_params.get("class_id")
+        sql = """
+            SELECT u.id, COALESCE(NULLIF(trim(u.first_name || ' ' || u.last_name), ''), u.username) AS name,
+                   u.email, u.is_active,
+                   sp.admission_number, sp.status,
+                   c.id AS class_id, (c.name || '-' || c.section) AS class_name, e.roll_number
+            FROM auth_user u
+            JOIN portal_student_profile sp ON sp.user_id = u.id
+            LEFT JOIN LATERAL (
+                SELECT * FROM portal_student_enrollment se
+                WHERE se.student_id = u.id ORDER BY se.academic_year DESC, se.id DESC LIMIT 1
+            ) e ON true
+            LEFT JOIN portal_class c ON c.id = e.class_id
+        """
+        params = []
+        if class_id:
+            sql += " WHERE c.id = %s"
+            params.append(class_id)
+        sql += " ORDER BY u.first_name, u.last_name, u.username"
+        return Response(serialise(rows(sql, params)))
+
+
+class StudentDetailView(AdminMixin, APIView):
+    def get(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "Student not found."}, status=404)
+        return Response(student_profile_payload(user))
+
+
+class TeacherListView(AdminMixin, APIView):
+    """All teachers, optionally filtered by ?department= and/or ?class_id=
+    (the latter via their portal_academic_allocation rows)."""
+
+    def get(self, request):
+        if not table_exists("portal_teacher_profile"):
+            return Response([])
+        department = request.query_params.get("department")
+        class_id = request.query_params.get("class_id")
+        sql = """
+            SELECT DISTINCT u.id, COALESCE(NULLIF(trim(u.first_name || ' ' || u.last_name), ''), u.username) AS name,
+                   u.email, u.is_active,
+                   tp.employee_code, tp.department, tp.qualification, tp.specialization
+            FROM auth_user u
+            JOIN portal_teacher_profile tp ON tp.user_id = u.id
+        """
+        conditions = []
+        params = []
+        if class_id and table_exists("portal_academic_allocation"):
+            sql += " JOIN portal_academic_allocation aa ON aa.teacher_id = u.id"
+            conditions.append("aa.class_id = %s")
+            params.append(class_id)
+        if department:
+            conditions.append("tp.department = %s")
+            params.append(department)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY name"
+        return Response(serialise(rows(sql, params)))
+
+
+class TeacherDetailView(AdminMixin, APIView):
+    def get(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "Teacher not found."}, status=404)
+        payload = teacher_profile_payload(user)
+        payload["classes"] = teacher_classes(user.id)
+        return Response(payload)
+
+
+class DepartmentListView(AdminMixin, APIView):
+    def get(self, request):
+        if not table_exists("portal_teacher_profile"):
+            return Response([])
+        data = rows(
+            "SELECT DISTINCT department FROM portal_teacher_profile "
+            "WHERE department IS NOT NULL AND department <> '' ORDER BY department"
+        )
+        return Response([d["department"] for d in data])
 
 
 # ---------------------------------------------------------------------------

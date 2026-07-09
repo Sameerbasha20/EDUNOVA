@@ -48,29 +48,33 @@ def _teaches(teacher_id, class_id, subject_id=None):
 _NOT_YOUR_CLASS = Response({"detail": "You are not allocated to teach this class."}, status=403)
 
 
+def teacher_profile_payload(user):
+    profile = {
+        "id": user.id,
+        "name": user.get_full_name().strip() or user.username,
+        "email": user.email,
+        "user_type": "Teacher",
+        "is_active": user.is_active,
+        "phone_number": "",
+        "employee_code": "—",
+        "department": "",
+        "qualification": "",
+        "specialization": "",
+        "date_of_joining": None,
+        "avatar_url": None,
+    }
+    if table_exists("portal_user_profile"):
+        p = row("SELECT phone_number, avatar_url FROM portal_user_profile WHERE user_id=%s", [user.id])
+        if p: profile.update(p)
+    if table_exists("portal_teacher_profile"):
+        t = row("SELECT employee_code, department, qualification, specialization, date_of_joining FROM portal_teacher_profile WHERE user_id=%s", [user.id])
+        if t: profile.update(t)
+    return serialise(profile)
+
+
 class TeacherProfileView(TeacherMixin, APIView):
     def get(self, request):
-        u = request.user
-        profile = {
-            "id": u.id,
-            "name": u.get_full_name().strip() or u.username,
-            "email": u.email,
-            "user_type": "Teacher",
-            "phone_number": "",
-            "employee_code": "—",
-            "department": "",
-            "qualification": "",
-            "specialization": "",
-            "date_of_joining": None,
-            "avatar_url": None,
-        }
-        if table_exists("portal_user_profile"):
-            p = row("SELECT phone_number, avatar_url FROM portal_user_profile WHERE user_id=%s", [u.id])
-            if p: profile.update(p)
-        if table_exists("portal_teacher_profile"):
-            t = row("SELECT employee_code, department, qualification, specialization, date_of_joining FROM portal_teacher_profile WHERE user_id=%s", [u.id])
-            if t: profile.update(t)
-        return Response(serialise(profile))
+        return Response(teacher_profile_payload(request.user))
 
 
 class TeacherDashboardView(TeacherMixin, APIView):

@@ -1,4 +1,5 @@
 import { Inbox } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const ACCENTS = {
   blue: "bg-academic-blue/10 text-academic-blue",
@@ -8,9 +9,13 @@ const ACCENTS = {
   red: "bg-red-100 text-danger",
 };
 
-export function StatCard({ icon: Icon, label, value, accent = "blue", sub }) {
+export function StatCard({ icon: Icon, label, value, accent = "blue", sub, to }) {
+  const Wrapper = to ? Link : "div";
   return (
-    <div className="bg-white rounded-card shadow-card p-5 flex items-start gap-4 hover:shadow-raised transition-shadow">
+    <Wrapper
+      {...(to ? { to } : {})}
+      className={`bg-white rounded-card shadow-card p-5 flex items-start gap-4 hover:shadow-raised transition-shadow ${to ? "cursor-pointer" : ""}`}
+    >
       <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${ACCENTS[accent] || ACCENTS.blue}`}>
         <Icon size={20} />
       </div>
@@ -19,7 +24,7 @@ export function StatCard({ icon: Icon, label, value, accent = "blue", sub }) {
         <p className="font-numeric text-2xl font-bold text-ink-primary leading-tight">{value}</p>
         {sub && <p className="text-xs text-ink-secondary mt-0.5">{sub}</p>}
       </div>
-    </div>
+    </Wrapper>
   );
 }
 
