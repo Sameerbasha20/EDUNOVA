@@ -229,12 +229,33 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
 }
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # allows any localhost port in dev; False in production (DEBUG=False)
-CORS_ALLOWED_ORIGINS = [] if DEBUG else config(
-    "CORS_ALLOWED_ORIGINS",
-    default="http://localhost:5173,http://127.0.0.1:5173",
-).split(",")
+# -----------------------------
+# Production / CORS
+# -----------------------------
+
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+else:
+    CORS_ALLOWED_ORIGINS = config(
+        "CORS_ALLOWED_ORIGINS",
+        default="https://edunova-c8pm8tusg-sameerbasha2087-4040s-projects.vercel.app",
+    ).split(",")
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="https://edunova-c8pm8tusg-sameerbasha2087-4040s-projects.vercel.app",
+).split(",")
 
 # Supabase Storage/API — server-side only. Never place service role keys in frontend.
 SUPABASE_URL = config("SUPABASE_URL", default="")
