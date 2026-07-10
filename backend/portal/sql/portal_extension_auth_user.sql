@@ -313,3 +313,20 @@ CREATE INDEX IF NOT EXISTS idx_portal_enrollment_student ON public.portal_studen
 CREATE INDEX IF NOT EXISTS idx_portal_allocation_teacher ON public.portal_academic_allocation(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_portal_attendance_student_date ON public.portal_attendance(student_id, date);
 CREATE INDEX IF NOT EXISTS idx_portal_message_users ON public.portal_message(sender_id, receiver_id);
+
+-- Added for the class-wide/report-style queries the first batch of indexes
+-- above (all keyed off a single student/teacher) doesn't cover: rank lists,
+-- report cards, fee/payment dashboards, and notice/leave/library listings all
+-- filter or sort by these columns and were doing full scans on portal_result,
+-- portal_payment, etc. as row counts grew past a few hundred.
+CREATE INDEX IF NOT EXISTS idx_portal_attendance_class_date ON public.portal_attendance(class_id, date);
+CREATE INDEX IF NOT EXISTS idx_portal_homework_class_due ON public.portal_homework(class_id, due_date);
+CREATE INDEX IF NOT EXISTS idx_portal_assignment_class_due ON public.portal_assignment(class_id, due_date);
+CREATE INDEX IF NOT EXISTS idx_portal_exam_schedule_class_date ON public.portal_exam_schedule(class_id, exam_date);
+CREATE INDEX IF NOT EXISTS idx_portal_exam_schedule_teacher_date ON public.portal_exam_schedule(teacher_id, exam_date);
+CREATE INDEX IF NOT EXISTS idx_portal_result_exam_marks ON public.portal_result(exam_schedule_id, marks_obtained DESC);
+CREATE INDEX IF NOT EXISTS idx_portal_payment_student_status ON public.portal_payment(student_id, status);
+CREATE INDEX IF NOT EXISTS idx_portal_payment_paid_status ON public.portal_payment(paid_at, status);
+CREATE INDEX IF NOT EXISTS idx_portal_library_txn_borrower_issue ON public.portal_library_transaction(borrower_id, issue_date DESC);
+CREATE INDEX IF NOT EXISTS idx_portal_leave_status_start ON public.portal_leave(status, start_date);
+CREATE INDEX IF NOT EXISTS idx_portal_notification_recipient ON public.portal_notification(recipient_type, target_class_id, created_at DESC);
