@@ -730,24 +730,30 @@ class LibraryIssueView(AdminMixin, APIView):
             days = int(request.data.get("loan_days", 14))
         except (TypeError, ValueError):
             return Response({"detail": "loan_days must be a number."}, status=400)
-        try:
-            book = row("SELECT available_quantity FROM portal_book WHERE id=%s", [book_id])
-        except DataError:
-            return Response({"detail": "Invalid book_id."}, status=400)
-        if not book:
-            return Response({"detail": "Book not found."}, status=404)
-        if book["available_quantity"] < 1:
-            return Response({"detail": "No copies available."}, status=400)
         if not row("SELECT 1 AS ok FROM auth_user WHERE id=%s", [borrower_id]):
             return Response({"detail": "Borrower not found."}, status=400)
         due = date.today() + timedelta(days=days)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO portal_library_transaction (book_id, borrower_id, due_date) VALUES (%s,%s,%s) RETURNING id",
-                [book_id, borrower_id, due],
-            )
-            tid = cursor.fetchone()[0]
-            cursor.execute("UPDATE portal_book SET available_quantity = available_quantity - 1 WHERE id=%s", [book_id])
+        # SELECT ... FOR UPDATE inside the transaction so two concurrent issues
+        # for the last copy of a book can't both read available_quantity=1 and
+        # both succeed -- the second request blocks until the first commits,
+        # then sees the decremented value.
+        try:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT available_quantity FROM portal_book WHERE id=%s FOR UPDATE", [book_id])
+                    book_row = cursor.fetchone()
+                    if not book_row:
+                        return Response({"detail": "Book not found."}, status=404)
+                    if book_row[0] < 1:
+                        return Response({"detail": "No copies available."}, status=400)
+                    cursor.execute(
+                        "INSERT INTO portal_library_transaction (book_id, borrower_id, due_date) VALUES (%s,%s,%s) RETURNING id",
+                        [book_id, borrower_id, due],
+                    )
+                    tid = cursor.fetchone()[0]
+                    cursor.execute("UPDATE portal_book SET available_quantity = available_quantity - 1 WHERE id=%s", [book_id])
+        except DataError:
+            return Response({"detail": "Invalid book_id."}, status=400)
         log_action(request.user, "library.issue", "book", book_id, {"borrower_id": borrower_id, "due_date": str(due)})
         return Response({"id": tid, "due_date": due.isoformat(), "detail": "Book issued."})
 
@@ -756,20 +762,26 @@ class LibraryReturnView(AdminMixin, APIView):
     def post(self, request, transaction_id):
         if not table_exists("portal_library_transaction"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
-        txn = row("SELECT book_id, due_date, return_date FROM portal_library_transaction WHERE id=%s", [transaction_id])
-        if not txn:
-            return Response({"detail": "Transaction not found."}, status=404)
-        if txn["return_date"]:
-            return Response({"detail": "Already returned."}, status=400)
         today = date.today()
-        late_days = max(0, (today - txn["due_date"]).days)
-        fine = late_days * FINE_PER_DAY
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE portal_library_transaction SET return_date=%s, fine_amount=%s WHERE id=%s",
-                [today, fine, transaction_id],
-            )
-            cursor.execute("UPDATE portal_book SET available_quantity = available_quantity + 1 WHERE id=%s", [txn["book_id"]])
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT book_id, due_date, return_date FROM portal_library_transaction WHERE id=%s FOR UPDATE",
+                    [transaction_id],
+                )
+                txn_row = cursor.fetchone()
+                if not txn_row:
+                    return Response({"detail": "Transaction not found."}, status=404)
+                book_id, due_date, return_date = txn_row
+                if return_date:
+                    return Response({"detail": "Already returned."}, status=400)
+                late_days = max(0, (today - due_date).days)
+                fine = late_days * FINE_PER_DAY
+                cursor.execute(
+                    "UPDATE portal_library_transaction SET return_date=%s, fine_amount=%s WHERE id=%s",
+                    [today, fine, transaction_id],
+                )
+                cursor.execute("UPDATE portal_book SET available_quantity = available_quantity + 1 WHERE id=%s", [book_id])
         log_action(request.user, "library.return", "transaction", transaction_id, {"fine": fine})
         return Response({"detail": "Book returned.", "late_days": late_days, "fine_amount": fine})
 

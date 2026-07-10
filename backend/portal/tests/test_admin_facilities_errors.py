@@ -128,6 +128,82 @@ class AdminFacilitiesErrorHandlingTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    # --- Hostel/library race-condition locking (SELECT ... FOR UPDATE) ---
+    # These don't exercise true concurrency (Django's test client is
+    # single-threaded), but they pin down that the FOR-UPDATE refactor kept
+    # the same capacity/availability/already-done business rules intact.
+
+    def test_hostel_allocation_rejected_once_room_at_capacity(self):
+        first = self.client.post(
+            "/api/admin-portal/hostel-allocations/",
+            data={"student_id": self.student.id, "room_id": self.room_id},
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(first.status_code, 200)
+
+        second_student = _make_user("facilities_err_student2", "Student")
+        second = self.client.post(
+            "/api/admin-portal/hostel-allocations/",
+            data={"student_id": second_student.id, "room_id": self.room_id},
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(second.status_code, 400)
+
+    def test_cannot_vacate_the_same_allocation_twice(self):
+        alloc = self.client.post(
+            "/api/admin-portal/hostel-allocations/",
+            data={"student_id": self.student.id, "room_id": self.room_id},
+            content_type="application/json",
+            **_auth_header(self.admin),
+        ).json()
+
+        first = self.client.post(f"/api/admin-portal/hostel-allocations/{alloc['id']}/vacate/", **_auth_header(self.admin))
+        self.assertEqual(first.status_code, 200)
+
+        second = self.client.post(f"/api/admin-portal/hostel-allocations/{alloc['id']}/vacate/", **_auth_header(self.admin))
+        self.assertEqual(second.status_code, 400)
+
+    def test_library_issue_rejected_once_no_copies_left(self):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO portal_book (title, author, isbn, barcode_id, quantity, available_quantity) "
+                "VALUES ('Single Copy','Author','ERR-ISBN-2','ERR-BC-2',1,1) RETURNING id"
+            )
+            single_book_id = cursor.fetchone()[0]
+
+        first = self.client.post(
+            "/api/admin-portal/library/issue/",
+            data={"book_id": single_book_id, "borrower_id": self.student.id},
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(first.status_code, 200)
+
+        second_student = _make_user("facilities_err_student3", "Student")
+        second = self.client.post(
+            "/api/admin-portal/library/issue/",
+            data={"book_id": single_book_id, "borrower_id": second_student.id},
+            content_type="application/json",
+            **_auth_header(self.admin),
+        )
+        self.assertEqual(second.status_code, 400)
+
+    def test_cannot_return_the_same_book_transaction_twice(self):
+        issue = self.client.post(
+            "/api/admin-portal/library/issue/",
+            data={"book_id": self.book_id, "borrower_id": self.student.id},
+            content_type="application/json",
+            **_auth_header(self.admin),
+        ).json()
+
+        first = self.client.post(f"/api/admin-portal/library/return/{issue['id']}/", **_auth_header(self.admin))
+        self.assertEqual(first.status_code, 200)
+
+        second = self.client.post(f"/api/admin-portal/library/return/{issue['id']}/", **_auth_header(self.admin))
+        self.assertEqual(second.status_code, 400)
+
     # --- Inventory ---
 
     def test_inventory_adjust_with_non_numeric_delta_returns_400_not_500(self):

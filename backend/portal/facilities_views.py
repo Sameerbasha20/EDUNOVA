@@ -9,7 +9,7 @@ and don't bloat admin_views.py further.
 """
 from datetime import date
 
-from django.db import DataError, IntegrityError, connection
+from django.db import DataError, IntegrityError, connection, transaction
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -90,19 +90,26 @@ class HostelAllocationView(AdminMixin, APIView):
         room_id = request.data.get("room_id")
         if not student_id or not row("SELECT 1 AS ok FROM auth_user WHERE id=%s", [student_id]):
             return Response({"detail": "Student not found."}, status=400)
-        room = row("SELECT capacity, occupied_beds FROM portal_room WHERE id=%s", [room_id])
-        if not room:
-            return Response({"detail": "Room not found."}, status=404)
-        if room["occupied_beds"] >= room["capacity"]:
-            return Response({"detail": "Room is already at full capacity."}, status=400)
+        # SELECT ... FOR UPDATE inside the transaction so two concurrent
+        # allocations to the last free bed can't both read
+        # occupied_beds < capacity and both succeed -- the second request
+        # blocks until the first commits, then sees the updated count.
         try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "INSERT INTO portal_hostel_allocation (student_id, room_id) VALUES (%s,%s) RETURNING id",
-                    [student_id, room_id],
-                )
-                alloc_id = cursor.fetchone()[0]
-                cursor.execute("UPDATE portal_room SET occupied_beds = occupied_beds + 1 WHERE id=%s", [room_id])
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT capacity, occupied_beds FROM portal_room WHERE id=%s FOR UPDATE", [room_id])
+                    room_row = cursor.fetchone()
+                    if not room_row:
+                        return Response({"detail": "Room not found."}, status=404)
+                    capacity, occupied_beds = room_row
+                    if occupied_beds >= capacity:
+                        return Response({"detail": "Room is already at full capacity."}, status=400)
+                    cursor.execute(
+                        "INSERT INTO portal_hostel_allocation (student_id, room_id) VALUES (%s,%s) RETURNING id",
+                        [student_id, room_id],
+                    )
+                    alloc_id = cursor.fetchone()[0]
+                    cursor.execute("UPDATE portal_room SET occupied_beds = occupied_beds + 1 WHERE id=%s", [room_id])
         except IntegrityError:
             return Response({"detail": "This student is already allocated to this room today."}, status=400)
         log_action(request.user, "hostel.allocate", "student", student_id, {"room_id": room_id})
@@ -113,20 +120,26 @@ class HostelVacateView(AdminMixin, APIView):
     def post(self, request, allocation_id):
         if not table_exists("portal_hostel_allocation"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)
-        alloc = row("SELECT room_id, vacated_date FROM portal_hostel_allocation WHERE id=%s", [allocation_id])
-        if not alloc:
-            return Response({"detail": "Allocation not found."}, status=404)
-        if alloc["vacated_date"]:
-            return Response({"detail": "Already vacated."}, status=400)
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "UPDATE portal_hostel_allocation SET vacated_date=%s WHERE id=%s",
-                [date.today(), allocation_id],
-            )
-            cursor.execute(
-                "UPDATE portal_room SET occupied_beds = GREATEST(occupied_beds - 1, 0) WHERE id=%s",
-                [alloc["room_id"]],
-            )
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT room_id, vacated_date FROM portal_hostel_allocation WHERE id=%s FOR UPDATE",
+                    [allocation_id],
+                )
+                alloc_row = cursor.fetchone()
+                if not alloc_row:
+                    return Response({"detail": "Allocation not found."}, status=404)
+                room_id, vacated_date = alloc_row
+                if vacated_date:
+                    return Response({"detail": "Already vacated."}, status=400)
+                cursor.execute(
+                    "UPDATE portal_hostel_allocation SET vacated_date=%s WHERE id=%s",
+                    [date.today(), allocation_id],
+                )
+                cursor.execute(
+                    "UPDATE portal_room SET occupied_beds = GREATEST(occupied_beds - 1, 0) WHERE id=%s",
+                    [room_id],
+                )
         log_action(request.user, "hostel.vacate", "allocation", allocation_id, {})
         return Response({"detail": "Room vacated."})
 
