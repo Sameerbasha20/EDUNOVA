@@ -6,6 +6,7 @@ from django.db import connection
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework import status
 
 from .roles import IsStudent
@@ -502,6 +503,9 @@ class FeesView(StudentOnlyMixin, APIView):
 
 
 class InitiatePaymentView(StudentOnlyMixin, APIView):
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "payment_initiate"
+
     def post(self, request):
         if not table_exists("portal_payment"):
             return Response({"detail": "Portal schema has not been applied."}, status=400)

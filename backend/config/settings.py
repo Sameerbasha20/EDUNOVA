@@ -162,6 +162,15 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+    # Baseline rate limit for every endpoint that doesn't set its own scoped
+    # throttle (i.e. everything except the OTP views below, which already
+    # have tighter dedicated scopes). Deliberately generous -- this exists to
+    # stop a runaway script or compromised token from hammering an endpoint
+    # at unlimited rate, not to constrain ordinary interactive use.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
     # Brute-force protection on the OTP login flow. Two layers per endpoint:
     # a tight per-account limit (the real defense — caps attempts against one
     # account regardless of how many IPs an attacker spreads across) and a
@@ -174,12 +183,17 @@ REST_FRAMEWORK = {
     # real effective limit is (rate x worker count). For production, point
     # CACHES at Redis so limits are enforced consistently across all workers.
     "DEFAULT_THROTTLE_RATES": {
+        "user": "1000/min",
+        "anon": "100/min",
         "otp_login_account": "5/min",
         "otp_verify_account": "5/min",
         "otp_resend_account": "3/min",
         "otp_login_ip": "40/min",
         "otp_verify_ip": "40/min",
         "otp_resend_ip": "20/min",
+        # Tighter scope for InitiatePaymentView specifically -- a fee-payment
+        # write is higher-value to rate-limit tightly than an ordinary read.
+        "payment_initiate": "20/min",
     },
 }
 
