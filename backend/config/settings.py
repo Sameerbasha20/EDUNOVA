@@ -57,6 +57,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "config.middleware.ContentSecurityPolicyMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -196,6 +197,22 @@ REST_FRAMEWORK = {
         "payment_initiate": "20/min",
     },
 }
+
+# Forcing HTTPS/HSTS is a separate, explicit opt-in from DEBUG -- unlike
+# DEBUG, this can't safely default to "on whenever DEBUG=False" because
+# manage.py test/CI run entirely over plain HTTP; a SECURE_SSL_REDIRECT that
+# fires there would turn every test request into a 301 instead of reaching
+# the view, breaking the whole suite. Set FORCE_HTTPS=True only once this
+# backend is actually served over HTTPS (i.e. behind a real TLS-terminating
+# proxy/load balancer) in production.
+FORCE_HTTPS = config("FORCE_HTTPS", default=False, cast=bool)
+SECURE_SSL_REDIRECT = FORCE_HTTPS
+if FORCE_HTTPS:
+    SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=31536000, cast=int)  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=6),
