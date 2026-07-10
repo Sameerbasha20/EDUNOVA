@@ -392,7 +392,14 @@ class QuizDetailView(StudentOnlyMixin, APIView):
         if not table_exists("portal_quiz"):
             return Response({"detail": "Quiz not found."}, status=404)
         quiz = row("SELECT id, title, duration_minutes, passing_score, course_id FROM portal_quiz WHERE id=%s", [quiz_id])
-        if not quiz or not _course_in_student_class(request.user.id, quiz.get("course_id")):
+        # A quiz with no course_id isn't tied to any class -- it's a general
+        # quiz open to any enrolled student, so only run the ownership check
+        # when there's actually a course to check ownership against. Without
+        # this distinction, _course_in_student_class's correct "no course_id
+        # means deny" default (written for the course-scoped case) also
+        # denies every course-less quiz to every student.
+        course_id = quiz.get("course_id") if quiz else None
+        if not quiz or (course_id and not _course_in_student_class(request.user.id, course_id)):
             return Response({"detail": "Quiz not found."}, status=404)
         quiz["questions"] = rows("SELECT id, question_text, options FROM portal_quiz_question WHERE quiz_id=%s", [quiz_id]) if table_exists("portal_quiz_question") else []
         return Response(serialise(quiz))
@@ -401,7 +408,8 @@ class QuizDetailView(StudentOnlyMixin, APIView):
         if not table_exists("portal_quiz"):
             return Response({"detail": "Quiz not found."}, status=404)
         quiz = row("SELECT passing_score, course_id FROM portal_quiz WHERE id=%s", [quiz_id])
-        if not quiz or not _course_in_student_class(request.user.id, quiz.get("course_id")):
+        course_id = quiz.get("course_id") if quiz else None
+        if not quiz or (course_id and not _course_in_student_class(request.user.id, course_id)):
             return Response({"detail": "Quiz not found."}, status=404)
         if not table_exists("portal_quiz_question"):
             return Response({"score": 0, "total": 0, "percentage": 0, "passed": False})
