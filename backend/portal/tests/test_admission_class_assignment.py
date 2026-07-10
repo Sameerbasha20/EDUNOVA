@@ -106,6 +106,37 @@ class AdmissionClassAssignmentTests(TestCase):
         self.assertEqual(data["credentials"]["class_assignment_error"], "Class not found.")
         self.assertTrue(data["credentials"]["student_username"])
 
+    def test_reenrolling_in_a_different_class_updates_in_place_not_duplicates(self):
+        # QA testing found two students live with two active enrollments for
+        # the same academic year in different classes -- current_class_for_
+        # student() then silently guessed between them via ORDER BY id DESC.
+        # _enroll_student_in_class must never leave a student with more than
+        # one enrollment row per academic year.
+        from portal.admin_views import _enroll_student_in_class
+
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO portal_class (name, section) VALUES ('Grade 6', 'B') RETURNING id")
+            other_class_id = cursor.fetchone()[0]
+
+        student = User.objects.create_user(username="reenroll_student", password="x", email="reenroll@edunova.edu")
+
+        class_name, error = _enroll_student_in_class(student, self.class_id)
+        self.assertIsNone(error)
+        self.assertEqual(class_name, "Grade 6-A")
+
+        class_name, error = _enroll_student_in_class(student, other_class_id)
+        self.assertIsNone(error)
+        self.assertEqual(class_name, "Grade 6-B")
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT class_id FROM portal_student_enrollment WHERE student_id=%s",
+                [student.id],
+            )
+            rows = cursor.fetchall()
+        self.assertEqual(len(rows), 1, "student must have exactly one enrollment row for the academic year")
+        self.assertEqual(rows[0][0], other_class_id)
+
     def test_roll_numbers_increment_within_same_class_and_year(self):
         first = _make_enquiry("d")
         second = _make_enquiry("e")

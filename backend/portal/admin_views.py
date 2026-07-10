@@ -125,6 +125,18 @@ def _enroll_student_in_class(student, class_id):
         [class_id, academic_year],
     )["n"]
     with connection.cursor() as cursor:
+        # A student can only have one active class per academic year. If
+        # they already have an enrollment for this year in a *different*
+        # class, update it in place instead of inserting a second row --
+        # otherwise current_class_for_student() is left to silently guess
+        # between two enrollments via ORDER BY ... LIMIT 1 (found live in
+        # QA testing: two students each ended up with two different active
+        # classes for the same year, see qa_test_report.md TC-EXPL-01).
+        cursor.execute(
+            "UPDATE portal_student_enrollment SET class_id=%s, roll_number=%s "
+            "WHERE student_id=%s AND academic_year=%s AND class_id <> %s",
+            [class_id, next_roll, student.id, academic_year, class_id],
+        )
         cursor.execute(
             "INSERT INTO portal_student_enrollment (student_id, class_id, academic_year, roll_number) "
             "VALUES (%s,%s,%s,%s) ON CONFLICT (student_id, class_id, academic_year) DO NOTHING",
