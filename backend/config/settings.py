@@ -233,3 +233,21 @@ DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="no-reply@edunovaacade
 
 OTP_EXPIRY_SECONDS = 300
 OTP_LENGTH = 6
+
+# Error tracking — off by default (no SENTRY_DSN configured), so dev/CI never
+# need the sentry-sdk package installed or a Sentry project provisioned. Set
+# SENTRY_DSN in the environment to turn this on; `pip install sentry-sdk`
+# first (listed in requirements.txt). Without this, a 500 in production is
+# only visible by someone thinking to check server logs.
+SENTRY_DSN = config("SENTRY_DSN", default="")
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=config("SENTRY_TRACES_SAMPLE_RATE", default=0.1, cast=float),
+        send_default_pii=False,
+        environment=config("SENTRY_ENVIRONMENT", default="production"),
+    )

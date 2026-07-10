@@ -12,3 +12,4 @@ redis==5.0.4
 Pillow==10.3.0
 gunicorn==22.0.0
 cryptography==42.0.8
+sentry-sdk==2.7.1
