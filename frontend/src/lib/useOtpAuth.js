@@ -12,8 +12,9 @@
  *   POST /api/auth/resend-otp/   → { detail }
  */
 import axios from "axios";
+import { resolveApiBaseUrl } from "./apiBaseUrl";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 // Bare axios instance — no auth header needed for these public endpoints.
 const authClient = axios.create({ baseURL: BASE_URL });

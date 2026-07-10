@@ -1,6 +1,7 @@
 import { Database, Download, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import api from "../lib/api";
+import { resolveApiBaseUrl } from "../../../lib/apiBaseUrl";
 import { Card, SectionTitle, Toast } from "../components/Common";
 
 export default function Settings() {
@@ -35,7 +36,7 @@ export default function Settings() {
           for now — the operational data (students, fees, transport, etc.) lives here in the Admin Portal.
         </p>
         <a
-          href={`${(import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "")}/admin/`}
+          href={`${resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL).replace(/\/api$/, "")}/admin/`}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-2 text-sm text-academic-blue hover:underline"
